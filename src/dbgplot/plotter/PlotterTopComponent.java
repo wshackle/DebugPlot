@@ -155,7 +155,7 @@ public class PlotterTopComponent extends TopComponent {
                 jLabelYScale.setText(String.format("Y Scale:%9.3g/div", y_grid));
             }
         });
-
+        this.setDisplayName(Bundle.CTL_PlotterTopComponent());
         //SetupOptionsTable();
 //        Lookup.getDefault()
 //                .lookupAll(CodeEvaluator.class)
@@ -2221,12 +2221,13 @@ public class PlotterTopComponent extends TopComponent {
         }
 
         RecalculatePlots();
-        if (auto_fit_to_graph) {
-            FitToGraph();
-        }
+        
         pd.setShowAll(total_plotters, false);
         pd.setShow(this.plotGraphJPanel1.plotter_num, true);
         refresh();
+        if (auto_fit_to_graph) {
+            FitToGraph();
+        }
     }
     private boolean nosplit = false;
 

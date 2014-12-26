@@ -699,6 +699,13 @@ public final class PlotGraphJPanel
             }
             nump++;
         }
+        final double oxd = (max_orig_x - min_orig_x)*0.05;
+        min_orig_x -= oxd;
+        max_orig_x += oxd;
+        final double oyd = (max_orig_y - min_orig_y)*0.05;
+        min_orig_y -= oyd;
+        max_orig_y += oyd;
+        
 	if(nump > 1 && PlotterCommon.debug_on)
 	{
 	    PlotterCommon.DebugPrint("min_orig_x="+min_orig_x);
