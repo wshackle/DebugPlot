@@ -1,4 +1,9 @@
 /*
+
+ This file was originally part of the 
+ NIST RCS (Real-time Control Systems) library.
+ It has been copied from that library and modified.
+
  The NIST RCS (Real-time Control Systems)
  library is public domain software, however it is preferred
  that the following disclaimers be attached.
@@ -29,6 +34,7 @@ package dbgplot.plotter;
 import dbgplot.utils.SaveImage;
 import java.awt.Color;
 import java.awt.Container;
+import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.GraphicsDevice;
 import java.awt.event.ActionEvent;
@@ -41,12 +47,20 @@ import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.Vector;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JColorChooser;
@@ -55,13 +69,12 @@ import javax.swing.JFrame;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
-import javax.swing.SpinnerNumberModel;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 import javax.swing.table.DefaultTableModel;
 import org.netbeans.api.debugger.*;
 import org.netbeans.api.debugger.jpda.JPDADebugger;
-import org.netbeans.api.debugger.jpda.Variable;
+import org.netbeans.api.debugger.jpda.ObjectVariable;
 import org.openide.awt.ActionID;
 import org.openide.awt.ActionReference;
 import org.openide.util.NbBundle;
@@ -90,9 +103,9 @@ import org.openide.windows.TopComponent;
         preferredID = "PlotterTopComponent"
 )
 @NbBundle.Messages({
-    "CTL_PlotterAction=Plotter",
-    "CTL_PlotterTopComponent=Plot Window",
-    "HINT_PlotterTopComponent=This is a Plotter window"
+    "CTL_PlotterAction=Plot",
+    "CTL_PlotterTopComponent=Plot",
+    "HINT_PlotterTopComponent=Plot variables from debug session here."
 })
 public class PlotterTopComponent extends TopComponent {
 
@@ -137,9 +150,9 @@ public class PlotterTopComponent extends TopComponent {
         this.plotGraphJPanel1.addPropertyChangeListener(PlotGraphJPanel.PROP_X_GRID, new PropertyChangeListener() {
 
             public void propertyChange(PropertyChangeEvent evt) {
-//		System.out.println("evt = " + evt);
+//		//System.out.println("evt = " + evt);
 //		String name = evt.getPropertyName();
-//		System.out.println("name = " + name);
+//		//System.out.println("name = " + name);
                 final double x_grid = (Double) (evt.getNewValue());
                 jLabelXScale.setText(String.format("X Scale:%9.3g/div", x_grid));
             }
@@ -148,9 +161,9 @@ public class PlotterTopComponent extends TopComponent {
         this.plotGraphJPanel1.addPropertyChangeListener(PlotGraphJPanel.PROP_Y_GRID, new PropertyChangeListener() {
 
             public void propertyChange(PropertyChangeEvent evt) {
-//		System.out.println("evt = " + evt);
+//		//System.out.println("evt = " + evt);
 //		String name = evt.getPropertyName();
-//		System.out.println("name = " + name);
+//		//System.out.println("name = " + name);
                 final double y_grid = (Double) (evt.getNewValue());
                 jLabelYScale.setText(String.format("Y Scale:%9.3g/div", y_grid));
             }
@@ -159,9 +172,20 @@ public class PlotterTopComponent extends TopComponent {
         //SetupOptionsTable();
 //        Lookup.getDefault()
 //                .lookupAll(CodeEvaluator.class)
-//                .forEach( (x) -> System.out.println(x));
+//                .forEach( (x) -> //System.out.println(x));
     }
     private boolean setup_options_table_done = false;
+
+    private String cleanName(String input) {
+        input = input.trim();
+        while (input.startsWith("\"")) {
+            input = input.substring(1).trim();
+        }
+        while (input.endsWith("\"")) {
+            input = input.substring(0, input.length() - 1).trim();
+        }
+        return input;
+    }
 
     private void evaluateAndPlotPrivate(final String expr) {
         try {
@@ -180,18 +204,124 @@ public class PlotterTopComponent extends TopComponent {
                 System.err.println("JPDADebugger == null");
                 return;
             }
-            Variable v = d.evaluate(expr);
-            System.out.println("v = " + v);
-            System.out.println(v.getType());
-            System.out.println(v.getValue());
-            final Object mirror = v.createMirrorObject();
-            System.out.println("mirror = " + mirror);
+
+            ObjectVariable ov = (ObjectVariable) d.evaluate(expr);
+
+            //System.out.println("v = " + v);
+            //System.out.println(v.getType());
+            //System.out.println(v.getValue());
+            final Object mirror = ov.createMirrorObject();
+            //System.out.println("mirror = " + mirror);
+            if (mirror != null) {
+                java.awt.EventQueue.invokeLater(new Runnable() {
+
+                    @Override
+                    public void run() {
+                        setEvaluatedExpr(expr);
+                        setEvaluatedObject(mirror);
+                    }
+                });
+                return;
+            }
+            final List<Map<String, Object>> fakeMirror = new ArrayList<>();
+            org.netbeans.api.debugger.jpda.Field ovfa[] = ov.getFields(0, ov.getFieldsCount());
+//            System.out.println("ovfa = " + ovfa);
+            final boolean is_array = ov.getType().endsWith("[]");
+            final int n = is_array
+                    ?ov.getFieldsCount()
+                    :Integer.valueOf(ov.getField("size").getValue());
+            //System.out.println("n = " + n);
+//            org.netbeans.api.debugger.jpda.Field elementData = ov.getField("elementData");
+//            Object o = elementData.createMirrorObject();
+            java.awt.EventQueue.invokeLater(new Runnable() {
+
+                @Override
+                public void run() {
+                    jProgressBar1.setMaximum(n);
+                }
+            });
+            for (int i = 0; i < n; i++) {
+                final int icopy = i;
+                java.awt.EventQueue.invokeLater(new Runnable() {
+
+                    @Override
+                    public void run() {
+                        jProgressBar1.setValue(icopy);
+                    }
+                });
+                ObjectVariable elem_ov = 
+                        is_array
+                        ?(ObjectVariable) ovfa[i]//d.evaluate(expr + "[" + i + "]")
+                        :(ObjectVariable) d.evaluate(expr + ".get(" + i + ")");
+//                final String fn_expr = expr + ".get(" + i + ").getClass().getFields().length";
+//                final int fn = Integer.valueOf(d.evaluate(fn_expr).getValue());
+                final int fn = elem_ov.getFieldsCount();
+                final Map<String, Object> map = new HashMap<>();
+                org.netbeans.api.debugger.jpda.Field fa[] = elem_ov.getFields(0, fn);
+                for (int j = 0; j < fa.length; j++) {
+                    try {
+                        final String name = fa[j].getName();
+//                    final String name_expr = expr + ".get(" + i + ").getClass().getFields()[" + j + "].getName()";
+//                    final String name = cleanName(d.evaluate(name_expr).getValue());
+                        //System.out.println("name = " + name);
+                        final Double D = Double.valueOf(fa[j].getValue());
+//                    final Variable fv = d.evaluate(expr + ".get(" + i + ")." + name);
+//                    //System.out.println("fv = " + fv);
+//                    final Object eov = fv.createMirrorObject();
+                        //System.out.println("ov = " + ov);
+                        map.put(name, D);
+                    } catch (Exception exception) {
+                        // ignore
+                    }
+                }
+                org.netbeans.api.debugger.jpda.Field ifa[] = elem_ov.getInheritedFields(0, 100);
+                for (int j = 0; j < ifa.length; j++) {
+                    try {
+                        final String name = ifa[j].getName();
+//                    final String name_expr = expr + ".get(" + i + ").getClass().getFields()[" + j + "].getName()";
+//                    final String name = cleanName(d.evaluate(name_expr).getValue());
+                        //System.out.println("name = " + name);
+                        final Double D = Double.valueOf(ifa[j].getValue());
+//                    final Variable fv = d.evaluate(expr + ".get(" + i + ")." + name);
+//                    //System.out.println("fv = " + fv);
+//                    final Object eov = fv.createMirrorObject();
+                        //System.out.println("ov = " + ov);
+                        map.put(name, D);
+                    } catch (Exception exception) {
+                        // ignore
+                    }
+                }
+//                final String mn_expr = expr + ".get(" + i + ").getClass().getMethods().length";
+//                final int mn = Integer.valueOf(d.evaluate(mn_expr).getValue());
+//                for (int k = 0; k < mn; k++) {
+//                    final String name_expr = expr + ".get(" + i + ").getClass().getMethods()[" + k + "].getName()";
+//                    final String name = cleanName(d.evaluate(name_expr).getValue());
+//                    //System.out.println("name = " + name);
+//                    if(!name.startsWith("get")) {
+//                        continue;
+//                    }
+//                    final String param_count_expr =
+//                            expr + ".get(" + i + ").getClass().getMethods()[" + k + "].getParameterCount()";
+//                    final int param_count = Integer.valueOf(d.evaluate(param_count_expr).getValue());
+//                    if(param_count != 0) {
+//                        continue;
+//                    }
+//                    //System.out.println("name = " + name);
+//                    final Variable return_fv = d.evaluate(expr + ".get(" + i + ")." + name+"()");
+//                    //System.out.println("fv = " + fv);
+//                    final Object return_ov = return_fv.createMirrorObject();
+//                    //System.out.println("ov = " + ov);
+//                    map.put(name.substring(3), return_ov);
+//                }
+                fakeMirror.add(map);
+            }
+            //System.out.println("fakeMirror = " + fakeMirror);
             java.awt.EventQueue.invokeLater(new Runnable() {
 
                 @Override
                 public void run() {
                     setEvaluatedExpr(expr);
-                    setEvaluatedObject(mirror);
+                    setEvaluatedObject(fakeMirror);
                 }
             });
         } catch (Exception exception) {
@@ -199,7 +329,7 @@ public class PlotterTopComponent extends TopComponent {
         }
     }
 
-        private String evaluatedExpr;
+    private String evaluatedExpr;
 
     /**
      * Get the value of evaluatedExpr
@@ -230,6 +360,8 @@ public class PlotterTopComponent extends TopComponent {
         return evaluatedResult;
     }
 
+    private static int eval_count = 0;
+
     /**
      * Set the value of evaluatedResult
      *
@@ -237,22 +369,70 @@ public class PlotterTopComponent extends TopComponent {
      */
     public void setEvaluatedObject(Object evaluatedResult) {
         this.evaluatedResult = evaluatedResult;
-        Class clazz = evaluatedResult.getClass();
-        if(clazz.isArray()) {
-            Class el_clazz = clazz.getComponentType();
-            if(double.class.equals(el_clazz)) {
-                double da[] = (double []) evaluatedResult;
-                this.LoadDoubleArray(this.evaluatedExpr, da);
+        if (null == this.evaluatedResult) {
+            return;
+        }
+        Class<?> clazz = evaluatedResult.getClass();
+        eval_count++;
+        final String plot_name = "[" + eval_count + "] " + this.evaluatedExpr;
+        if (clazz.isArray()) {
+            Class<?> el_clazz = clazz.getComponentType();
+            if (double.class.equals(el_clazz)) {
+                double da[] = (double[]) evaluatedResult;
+                this.Load(plot_name, da);
+            } else if (float.class.equals(el_clazz)) {
+                float fa[] = (float[]) evaluatedResult;
+                this.Load(plot_name, fa);
+            } else if (short.class.equals(el_clazz)) {
+                short fa[] = (short[]) evaluatedResult;
+                this.Load(plot_name, fa);
+            } else if (int.class.equals(el_clazz)) {
+                int fa[] = (int[]) evaluatedResult;
+                this.Load(plot_name, fa);
+            } else if (long.class.equals(el_clazz)) {
+                long fa[] = (long[]) evaluatedResult;
+                this.Load(plot_name, fa);
+            } else if (boolean.class.equals(el_clazz)) {
+                boolean fa[] = (boolean[]) evaluatedResult;
+                this.Load(plot_name, fa);
+            } else if (!clazz.isPrimitive()) {
+                Object ao[] = (Object[]) evaluatedResult;
+                this.Load(plot_name, ao);
             }
+        } else if (Collection.class.isAssignableFrom(clazz)) {
+            Collection<?> c = (Collection) evaluatedResult;
+            List l = new ArrayList();
+            l.addAll(c);
+            if (l.size() < 1) {
+                return;
+            }
+            this.Load(plot_name, l);
         }
     }
 
     public void evaluateAndPlot(final String expr) {
+        this.jTextFieldEvalExpr.setEditable(false);
+        this.jTextFieldEvalExpr.setEnabled(false);
+        this.jButtonPlot.setEnabled(false);
         new Thread(new Runnable() {
 
             @Override
             public void run() {
-                evaluateAndPlotPrivate(expr);
+                try {
+                    evaluateAndPlotPrivate(expr);
+                } catch (Exception e) {
+                    // ignore
+                } finally {
+                    java.awt.EventQueue.invokeLater(new Runnable() {
+
+                        @Override
+                        public void run() {
+                            jTextFieldEvalExpr.setEditable(true);
+                            jTextFieldEvalExpr.setEnabled(true);
+                            jButtonPlot.setEnabled(true);
+                        }
+                    });
+                }
             }
         }).start();
     }
@@ -295,7 +475,6 @@ public class PlotterTopComponent extends TopComponent {
 //        this.jToggleButtonEqualizeAxis.setSelected(_e_mode);
 //        this.set_e_mode(_e_mode);
 //    }
-
     @SuppressWarnings("unchecked")
     private void AddOptionsTableListener() {
         jTableOptions.getModel().addTableModelListener(new TableModelListener() {
@@ -403,6 +582,9 @@ public class PlotterTopComponent extends TopComponent {
         jLabel8 = new javax.swing.JLabel();
         jButton1 = new javax.swing.JButton();
         jToggleButtonSplit = new javax.swing.JToggleButton();
+        jButtonClear = new javax.swing.JButton();
+        jButtonPlot = new javax.swing.JButton();
+        jProgressBar1 = new javax.swing.JProgressBar();
 
         jFrameOptions.setTitle("Plotter Options");
         jFrameOptions.setMinimumSize(new java.awt.Dimension(500, 400));
@@ -528,10 +710,22 @@ public class PlotterTopComponent extends TopComponent {
             .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel1Layout.createSequentialGroup()
                 .addContainerGap()
                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
-                    .addComponent(jScrollPanelOptonsTable, javax.swing.GroupLayout.Alignment.LEADING, javax.swing.GroupLayout.DEFAULT_SIZE, 678, Short.MAX_VALUE)
-                    .addComponent(jButtonCloseOptions)
+                    .addComponent(jScrollPanelOptonsTable, javax.swing.GroupLayout.Alignment.LEADING, javax.swing.GroupLayout.DEFAULT_SIZE, 687, Short.MAX_VALUE)
+                    .addGroup(jPanel1Layout.createSequentialGroup()
+                        .addGap(0, 0, Short.MAX_VALUE)
+                        .addComponent(jButtonCloseOptions))
                     .addGroup(javax.swing.GroupLayout.Alignment.LEADING, jPanel1Layout.createSequentialGroup()
                         .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addGroup(jPanel1Layout.createSequentialGroup()
+                                .addComponent(jCheckBoxK2)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(jCheckBoxShowGrid)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(jButtonShowAll)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(jButtonHideAll)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(jButtonDeleteMarked))
                             .addGroup(jPanel1Layout.createSequentialGroup()
                                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                                     .addComponent(jLabel5)
@@ -541,26 +735,12 @@ public class PlotterTopComponent extends TopComponent {
                                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
                                     .addComponent(jButtonAxis, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                                     .addComponent(jButtonGrid, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                                    .addComponent(jButtonBackground, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
-                            .addGroup(jPanel1Layout.createSequentialGroup()
-                                .addComponent(jCheckBoxK2)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jCheckBoxShowGrid)))
-                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
-                            .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel1Layout.createSequentialGroup()
-                                    .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 304, Short.MAX_VALUE)
-                                    .addComponent(jCheckBoxReverseX))
-                                .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel1Layout.createSequentialGroup()
-                                    .addGap(130, 130, 130)
-                                    .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
-                                        .addComponent(jButtonShowAll)
-                                        .addComponent(jButtonHideAll))
-                                    .addGap(9, 9, 9)
-                                    .addComponent(jButtonDeleteMarked)))
-                            .addGroup(jPanel1Layout.createSequentialGroup()
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jCheckBoxApplyAbsY)))))
+                                    .addComponent(jButtonBackground, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addComponent(jCheckBoxReverseX)
+                            .addComponent(jCheckBoxApplyAbsY))
+                        .addGap(0, 0, Short.MAX_VALUE)))
                 .addContainerGap())
         );
 
@@ -577,29 +757,23 @@ public class PlotterTopComponent extends TopComponent {
                     .addComponent(jButtonBackground)
                     .addComponent(jCheckBoxReverseX))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING, false)
-                    .addGroup(jPanel1Layout.createSequentialGroup()
-                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(jLabel6)
-                            .addComponent(jButtonGrid))
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(jLabel7)
-                            .addComponent(jButtonAxis))
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                            .addComponent(jCheckBoxK2)
-                            .addComponent(jCheckBoxShowGrid)))
-                    .addGroup(jPanel1Layout.createSequentialGroup()
-                        .addComponent(jCheckBoxApplyAbsY)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                        .addComponent(jButtonShowAll)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                            .addComponent(jButtonDeleteMarked)
-                            .addComponent(jButtonHideAll))))
+                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(jLabel6)
+                    .addComponent(jButtonGrid))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jScrollPanelOptonsTable, javax.swing.GroupLayout.DEFAULT_SIZE, 181, Short.MAX_VALUE)
+                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(jLabel7)
+                    .addComponent(jButtonAxis))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(jCheckBoxK2)
+                    .addComponent(jCheckBoxShowGrid)
+                    .addComponent(jButtonShowAll)
+                    .addComponent(jButtonHideAll)
+                    .addComponent(jButtonDeleteMarked)
+                    .addComponent(jCheckBoxApplyAbsY))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jScrollPanelOptonsTable, javax.swing.GroupLayout.DEFAULT_SIZE, 169, Short.MAX_VALUE)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(jButtonCloseOptions)
                 .addGap(8, 8, 8))
@@ -683,25 +857,25 @@ public class PlotterTopComponent extends TopComponent {
             }
         });
 
-        plotGraphJPanel1.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseClicked(java.awt.event.MouseEvent evt) {
-                plotGraphJPanel1MouseClicked(evt);
+        plotGraphJPanel1.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+            public void mouseDragged(java.awt.event.MouseEvent evt) {
+                plotGraphJPanel1MouseDragged(evt);
             }
+        });
+        plotGraphJPanel1.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mousePressed(java.awt.event.MouseEvent evt) {
                 plotGraphJPanel1MousePressed(evt);
             }
             public void mouseReleased(java.awt.event.MouseEvent evt) {
                 plotGraphJPanel1MouseReleased(evt);
             }
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                plotGraphJPanel1MouseClicked(evt);
+            }
         });
         plotGraphJPanel1.addComponentListener(new java.awt.event.ComponentAdapter() {
             public void componentResized(java.awt.event.ComponentEvent evt) {
                 plotGraphJPanel1ComponentResized(evt);
-            }
-        });
-        plotGraphJPanel1.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
-            public void mouseDragged(java.awt.event.MouseEvent evt) {
-                plotGraphJPanel1MouseDragged(evt);
             }
         });
 
@@ -787,6 +961,20 @@ public class PlotterTopComponent extends TopComponent {
             }
         });
 
+        jButtonClear.setText("Clear");
+        jButtonClear.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButtonClearActionPerformed(evt);
+            }
+        });
+
+        jButtonPlot.setText("Plot");
+        jButtonPlot.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButtonPlotActionPerformed(evt);
+            }
+        });
+
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(this);
         this.setLayout(layout);
         layout.setHorizontalGroup(
@@ -807,7 +995,7 @@ public class PlotterTopComponent extends TopComponent {
                             .addComponent(jLabel1)
                             .addComponent(jLabel8, javax.swing.GroupLayout.Alignment.TRAILING))
                         .addGap(18, 18, 18)
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
                             .addGroup(layout.createSequentialGroup()
                                 .addComponent(jTextFieldYMax, javax.swing.GroupLayout.PREFERRED_SIZE, 38, javax.swing.GroupLayout.PREFERRED_SIZE)
                                 .addGap(6, 6, 6)
@@ -825,14 +1013,22 @@ public class PlotterTopComponent extends TopComponent {
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                 .addComponent(jLabel4)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jTextFieldXMax, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addComponent(jTextFieldXMax, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                            .addGroup(layout.createSequentialGroup()
+                                .addComponent(jTextFieldEvalExpr)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(jProgressBar1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
+                            .addGroup(javax.swing.GroupLayout.Alignment.LEADING, layout.createSequentialGroup()
                                 .addComponent(jButton1)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jToggleButtonSplit)
-                                .addGap(0, 16, Short.MAX_VALUE))
-                            .addComponent(jTextFieldEvalExpr))
-                        .addContainerGap())))
+                                .addComponent(jToggleButtonSplit))
+                            .addGroup(javax.swing.GroupLayout.Alignment.LEADING, layout.createSequentialGroup()
+                                .addComponent(jButtonPlot)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(jButtonClear)))
+                        .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
         );
 
         layout.linkSize(javax.swing.SwingConstants.HORIZONTAL, new java.awt.Component[] {jTextFieldXMin, jTextFieldYMin});
@@ -842,7 +1038,7 @@ public class PlotterTopComponent extends TopComponent {
             .addGroup(layout.createSequentialGroup()
                 .addContainerGap()
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addComponent(jScrollBarVert, javax.swing.GroupLayout.DEFAULT_SIZE, 92, Short.MAX_VALUE)
+                    .addComponent(jScrollBarVert, javax.swing.GroupLayout.DEFAULT_SIZE, 86, Short.MAX_VALUE)
                     .addComponent(plotGraphJPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(jScrollBarHorz, javax.swing.GroupLayout.PREFERRED_SIZE, 13, javax.swing.GroupLayout.PREFERRED_SIZE)
@@ -861,9 +1057,16 @@ public class PlotterTopComponent extends TopComponent {
                     .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 23, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(jToggleButtonSplit, javax.swing.GroupLayout.PREFERRED_SIZE, 23, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jTextFieldEvalExpr, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jLabel8)))
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                        .addComponent(jTextFieldEvalExpr)
+                        .addComponent(jButtonClear)
+                        .addComponent(jButtonPlot))
+                    .addGroup(layout.createSequentialGroup()
+                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addComponent(jLabel8)
+                            .addComponent(jProgressBar1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addContainerGap())))
         );
     }// </editor-fold>//GEN-END:initComponents
     private boolean auto_fit_to_graph = true;
@@ -917,8 +1120,8 @@ public class PlotterTopComponent extends TopComponent {
         chooser.setFileFilter(filter);
         int returnVal = chooser.showSaveDialog(this);
         if (returnVal == JFileChooser.APPROVE_OPTION) {
-            System.out.println("You chose to open this file: "
-                    + chooser.getSelectedFile().getPath());
+            //System.out.println("You chose to open this file: "
+//                    + chooser.getSelectedFile().getPath());
             last_dir = chooser.getCurrentDirectory();
             SaveFile(chooser.getSelectedFile().getPath());
         }
@@ -1072,6 +1275,31 @@ public class PlotterTopComponent extends TopComponent {
         LoadDataIntoIxyVector();
         Double da[][] = LoadDataInto2DArray();
         ((DefaultTableModel) jTableData.getModel()).setDataVector(da, colvec.toArray());
+    }
+
+    private void LoadDataSpreadSheet() {
+        try {
+            LoadDataIntoIxyVector();
+            Double da[][] = LoadDataInto2DArray();
+            File f = File.createTempFile("dbg_plot", ".csv");
+            PrintStream ps = new PrintStream(new FileOutputStream(f));
+            for (String s : colvec) {
+                ps.print(s);
+                ps.print(",");
+            }
+            ps.println();
+            for (Double daline[] : da) {
+                for (Double D : daline) {
+                    ps.print(D);
+                    ps.print(",");
+                }
+                ps.println();
+            }
+            ps.close();
+            Desktop.getDesktop().open(f);
+        } catch (Exception exception) {
+            exception.printStackTrace();
+        }
     }
 
     /**
@@ -1379,6 +1607,7 @@ public class PlotterTopComponent extends TopComponent {
             if (null != jTableData) {
                 ((DefaultTableModel) jTableData.getModel()).setRowCount(0);
             }
+            this.jTextFieldEvalExpr.setText("");
 //            this.jToggleButtonLockDisplay.setSelected(false);
 //            jComboBoxFunc.setSelectedIndex(0);
 //            jToggleButtonPause.setSelected(false);
@@ -1389,6 +1618,7 @@ public class PlotterTopComponent extends TopComponent {
             clearing_plots = false;
         }
     }
+
     /**
      *
      * @param _al
@@ -1396,6 +1626,7 @@ public class PlotterTopComponent extends TopComponent {
     public void addClearActionListener(java.awt.event.ActionListener _al) {
 //        jButtonClear.addActionListener(_al);
     }
+
     /**
      *
      * @param _b
@@ -1407,6 +1638,7 @@ public class PlotterTopComponent extends TopComponent {
 //            jToggleButtonKey.setSelected(_b);
 //        }
     }
+
     /**
      *
      */
@@ -1639,30 +1871,86 @@ public class PlotterTopComponent extends TopComponent {
         this.plotGraphJPanel1.HandleResize();
     }
 
+    public void showDataTable() {
+        this.jFrameData.setVisible(false);
+        ((DefaultTableModel) jTableData.getModel()).setDataVector(new Vector<Double>(), new Vector<Double>());
+        switch (JOptionPane.showConfirmDialog(this.getParent(), "Use Interpolation ?")) {
+            case JOptionPane.CANCEL_OPTION:
+                return;
+
+            case JOptionPane.YES_OPTION:
+                this.setUse_Interpolation(true);
+                break;
+
+            case JOptionPane.NO_OPTION:
+                this.setUse_Interpolation(false);
+                break;
+        }
+        this.jFrameData.setVisible(true);
+        LoadDataIntoTable();
+    }
+
+    public void showSpreadsheet() {
+        this.jFrameData.setVisible(false);
+//        ((DefaultTableModel) jTableData.getModel()).setDataVector(new Vector(), new Vector());
+        switch (JOptionPane.showConfirmDialog(this.getParent(), "Use Interpolation ?")) {
+            case JOptionPane.CANCEL_OPTION:
+                return;
+
+            case JOptionPane.YES_OPTION:
+                this.setUse_Interpolation(true);
+                break;
+
+            case JOptionPane.NO_OPTION:
+                this.setUse_Interpolation(false);
+                break;
+        }
+//        this.jFrameData.setVisible(true);
+        LoadDataIntoTable();
+    }
+
+    public void showDetails() {
+        if (!this.setup_options_table_done) {
+            this.SetupOptionsTable();
+        }
+        this.InitOptionsTable();
+        jFrameOptions.setVisible(true);
+    }
+
+    public void showStatistics() {
+        try {
+            String s = this.ComputeStatsString();
+            StatsTextJFrame stats_jf = new StatsTextJFrame(s);
+            //System.out.println(s);
+        } catch (Exception exception) {
+            exception.printStackTrace();
+        }
+    }
+
     private void popup_create() {
         jpop = new JPopupMenu();
-        jpopFullScreenCheckboxMenuItem
-                = new JCheckBoxMenuItem("Full Screen");
-        jpopFullScreenCheckboxMenuItem.addActionListener(new ActionListener() {
-
-            public void actionPerformed(ActionEvent e) {
-                if (e.getSource() == jpopFullScreenCheckboxMenuItem) {
-                    if (PlotterCommon.debug_on) {
-                        PlotterCommon.DebugPrint("jpopFullScreenCheckboxMenuItem.isSelected()=" + jpopFullScreenCheckboxMenuItem.isSelected());
-                    }
-                    if (!cur_pgjp.is_full_screen) {
-                        ShowFullScreen();
-                    } else {
-                        ClearFullScreen();
-                    }
-
-                    if (cur_pgjp.is_full_screen != jpopFullScreenCheckboxMenuItem.isSelected()) {
-                        jpopFullScreenCheckboxMenuItem.setSelected(cur_pgjp.is_full_screen);
-                    }
-                }
-            }
-        });
-        jpop.add(this.jpopFullScreenCheckboxMenuItem);
+//        jpopFullScreenCheckboxMenuItem
+//                = new JCheckBoxMenuItem("Full Screen");
+//        jpopFullScreenCheckboxMenuItem.addActionListener(new ActionListener() {
+//
+//            public void actionPerformed(ActionEvent e) {
+//                if (e.getSource() == jpopFullScreenCheckboxMenuItem) {
+//                    if (PlotterCommon.debug_on) {
+//                        PlotterCommon.DebugPrint("jpopFullScreenCheckboxMenuItem.isSelected()=" + jpopFullScreenCheckboxMenuItem.isSelected());
+//                    }
+//                    if (!cur_pgjp.is_full_screen) {
+//                        ShowFullScreen();
+//                    } else {
+//                        ClearFullScreen();
+//                    }
+//
+//                    if (cur_pgjp.is_full_screen != jpopFullScreenCheckboxMenuItem.isSelected()) {
+//                        jpopFullScreenCheckboxMenuItem.setSelected(cur_pgjp.is_full_screen);
+//                    }
+//                }
+//            }
+//        });
+//        jpop.add(this.jpopFullScreenCheckboxMenuItem);
         jpopSaveImageMenuItem
                 = new JMenuItem("Save Image As ...");
         jpopSaveImageMenuItem.addActionListener(new ActionListener() {
@@ -1683,6 +1971,52 @@ public class PlotterTopComponent extends TopComponent {
             }
         });
         jpop.add(this.jpopSetFitMenuItem);
+        final JCheckBoxMenuItem jpopShowKeyMenuItem = new JCheckBoxMenuItem("Show Key");
+        jpopShowKeyMenuItem.setSelected(this.plotGraphJPanel1.show_key);
+        jpopShowKeyMenuItem.addActionListener(new ActionListener() {
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                setShowKey(jpopShowKeyMenuItem.isSelected());
+            }
+        });
+        jpop.add(jpopShowKeyMenuItem);
+        final JMenuItem jpopShowDataTableMenuItem = new JMenuItem("Show Data Table ...");
+        jpopShowDataTableMenuItem.addActionListener(new ActionListener() {
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                showDataTable();
+            }
+        });
+        jpop.add(jpopShowDataTableMenuItem);
+        final JMenuItem jpopDetailsMenuItem = new JMenuItem("Details ...");
+        jpopDetailsMenuItem.addActionListener(new ActionListener() {
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                showDetails();
+            }
+        });
+        jpop.add(jpopDetailsMenuItem);
+        final JMenuItem jpopStatsMenuItem = new JMenuItem("Stats ...");
+        jpopStatsMenuItem.addActionListener(new ActionListener() {
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                showStatistics();
+            }
+        });
+        jpop.add(jpopStatsMenuItem);
+        final JMenuItem jpopSpreadSheetMenuItem = new JMenuItem("Send to spreadsheet ...");
+        jpopSpreadSheetMenuItem.addActionListener(new ActionListener() {
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                LoadDataSpreadSheet();
+            }
+        });
+        jpop.add(jpopSpreadSheetMenuItem);
     }
 
     private void popup_show(java.awt.event.MouseEvent evt) {
@@ -2076,6 +2410,14 @@ public class PlotterTopComponent extends TopComponent {
     private void jTextFieldEvalExprActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jTextFieldEvalExprActionPerformed
         this.evaluateAndPlot(this.jTextFieldEvalExpr.getText());
     }//GEN-LAST:event_jTextFieldEvalExprActionPerformed
+
+    private void jButtonClearActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButtonClearActionPerformed
+        this.Clear();
+    }//GEN-LAST:event_jButtonClearActionPerformed
+
+    private void jButtonPlotActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButtonPlotActionPerformed
+        this.evaluateAndPlot(this.jTextFieldEvalExpr.getText());
+    }//GEN-LAST:event_jButtonPlotActionPerformed
     private PlotLoader pl = null;
 
     /**
@@ -2119,8 +2461,7 @@ public class PlotterTopComponent extends TopComponent {
 
         if (null != this.plotGraphJPanel1
                 && null != this.plotGraphJPanel1.plots
-                && this.plotGraphJPanel1.plots.size() > 3
-//                && this.jComboBoxFunc.getSelectedIndex() == 0
+                && this.plotGraphJPanel1.plots.size() > 3 //                && this.jComboBoxFunc.getSelectedIndex() == 0
                 ) {
             this.jToggleButtonSplit.setSelected(true);
             this.plotGraphJPanel1.s_mode = true;
@@ -2159,7 +2500,7 @@ public class PlotterTopComponent extends TopComponent {
     public void LoadXYFloatArrays(String name, float xA[], float yA[]) {
         //Clear();
         if (xA == null) {
-            this.LoadFloatArray(name, yA);
+            this.Load(name, yA);
             return;
         }
         PlotData pd = new PlotData();
@@ -2181,13 +2522,191 @@ public class PlotterTopComponent extends TopComponent {
         refresh();
     }
 
+    private void PostLoad(PlotData pd) {
+        RecalculatePlots();
+
+//        pd.setShowAll(total_plotters, false);
+        if(null != pd) {
+            pd.setShow(this.plotGraphJPanel1.plotter_num, true);
+        }
+        refresh();
+        if (auto_fit_to_graph) {
+            FitToGraph();
+        }
+    }
+
     /**
      * Loads an arrays into a single plot and displays it.
      *
      * @param name -- name of the plot
      * @param fa -- float array to plot.
      */
-    public void LoadFloatArray(String name, float fa[]) {
+    public void Load(String name, Object ao[]) {
+        Load(name, Arrays.asList(ao));
+    }
+
+    /**
+     * Loads an arrays into a single plot and displays it.
+     *
+     * @param name -- name of the plot
+     * @param fa -- float array to plot.
+     */
+    public void Load(String name, List<?> l) {
+        //Clear();
+        PlotData pd = new PlotData();
+        pd.name = name;
+        this.plotGraphJPanel1.AddPlot(pd, name);
+        Map<String, PlotData> subFieldsMap = new HashMap<String, PlotData>();
+        for (int i = 0; i < l.size(); i++) {
+            try {
+                Set<String> fieldsUsed = new HashSet<String>();
+                Object o = l.get(i);
+                Class<?> c = o.getClass();
+                if (Map.class.isAssignableFrom(c)) {
+                    Map m = (Map) o;
+                    Set s = m.keySet();
+                    for (Object k : s) {
+                        final String fname = k.toString();
+                        final String fnameUp = fname.toUpperCase();
+                        if (fieldsUsed.contains(fnameUp)) {
+                            continue;
+                        }
+                        final Object ov = m.get(k);
+                        Method ftoDouble = null;
+                        try {
+                            ftoDouble = ov.getClass().getMethod("doubleValue");
+                        } catch (Exception exception) {
+                            // ignore
+                        }
+                        if (null == ftoDouble) {
+                            continue;
+                        }
+                        PlotData pdf = subFieldsMap.get(fnameUp);
+                        if (null == pdf) {
+                            pdf = new PlotData();
+                            pdf.name = name + "." + fname;
+                            this.plotGraphJPanel1.AddPlot(pdf, pdf.name);
+                        }
+                        double val = (Double) ftoDouble.invoke(ov);
+                        this.plotGraphJPanel1.AddPointToPlot(pdf, i, val, true, i, val);
+                        subFieldsMap.put(fnameUp, pdf);
+                        fieldsUsed.add(fnameUp);
+                    }
+                }
+                Method toDouble = null;
+                try {
+                    toDouble = c.getMethod("doubleValue");
+                } catch (Exception exception) {
+                    // ignore
+                }
+                if (null != toDouble) {
+                    double val = (Double) toDouble.invoke(o);
+                    this.plotGraphJPanel1.AddPointToPlot(pd, i, val, true, i, val);
+                } else {
+                    Field fa[] = c.getFields();
+                    for (Field f : fa) {
+                        final String fname = f.getName();
+                        final String fnameUp = fname.toUpperCase();
+                        if (fieldsUsed.contains(fnameUp)) {
+                            continue;
+                        }
+                        Object fval = null;
+                        try {
+                            fval = f.get(o);
+                        } catch (Exception e) {
+                            //ignore
+                        }
+                        if (fval == null) {
+                            continue;
+                        }
+                        Method ftoDouble = null;
+                        try {
+                            ftoDouble = fval.getClass().getMethod("doubleValue");
+
+                        } catch (Exception exception) {
+                            // ignore
+                        }
+                        if (null == ftoDouble) {
+                            continue;
+                        }
+                        PlotData pdf = subFieldsMap.get(fnameUp);
+                        if (null == pdf) {
+                            pdf = new PlotData();
+                            pdf.name = name + "." + fname;
+                            this.plotGraphJPanel1.AddPlot(pdf, pdf.name);
+                        }
+                        double val = (Double) ftoDouble.invoke(fval);
+                        this.plotGraphJPanel1.AddPointToPlot(pdf, i, val, true, i, val);
+                        subFieldsMap.put(fnameUp, pdf);
+                        fieldsUsed.add(fnameUp);
+                    }
+                    Method ma[] = c.getMethods();
+                    for (Method m : ma) {
+                        final String mname = m.getName();
+                        if (!mname.startsWith("get")) {
+                            continue;
+                        }
+                        if (m.getParameterCount() != 0) {
+                            continue;
+                        }
+                        if (m.getReturnType().equals(Void.TYPE)
+                                || m.getReturnType().equals(String.class)) {
+                            continue;
+                        }
+                        final String fname = mname.substring(3);
+                        final String fnameUp = fname.toUpperCase();
+                        if (fieldsUsed.contains(fnameUp)) {
+                            continue;
+                        }
+                        Object fval = null;
+                        try {
+                            fval = m.invoke(o);
+                        } catch (Exception e) {
+                            //ignore
+                        }
+                        if (fval == null) {
+                            continue;
+                        }
+                        Method ftoDouble = null;
+                        try {
+                            ftoDouble = fval.getClass().getMethod("doubleValue");
+                        } catch (Exception exception) {
+                            // ignore
+                        }
+                        if (null == ftoDouble) {
+                            continue;
+                        }
+                        PlotData pdf = subFieldsMap.get(fnameUp);
+                        if (null == pdf) {
+                            pdf = new PlotData();
+                            pdf.name = name + "." + fname;
+                            this.plotGraphJPanel1.AddPlot(pdf, pdf.name);
+                        }
+                        double val = (Double) ftoDouble.invoke(fval);
+                        this.plotGraphJPanel1.AddPointToPlot(pdf, i, val, true, i, val);
+                        subFieldsMap.put(fnameUp, pdf);
+                        fieldsUsed.add(fnameUp);
+                    }
+                }
+            } catch (Exception exception) {
+                exception.printStackTrace();
+            }
+        }
+        if(pd.get_num_points() < 1) {
+            this.plotGraphJPanel1.RemovePlot(pd.name);
+            this.PostLoad(null);
+        } else {
+            this.PostLoad(pd);
+        }
+    }
+
+    /**
+     * Loads an arrays into a single plot and displays it.
+     *
+     * @param name -- name of the plot
+     * @param fa -- float array to plot.
+     */
+    public void Load(String name, float fa[]) {
         //Clear();
         PlotData pd = new PlotData();
         pd.name = name;
@@ -2195,23 +2714,16 @@ public class PlotterTopComponent extends TopComponent {
         for (int i = 0; i < fa.length; i++) {
             this.plotGraphJPanel1.AddPointToPlot(pd, i, fa[i], true, i, fa[i]);
         }
-
-        RecalculatePlots();
-        if (auto_fit_to_graph) {
-            FitToGraph();
-        }
-        pd.setShowAll(total_plotters, false);
-        pd.setShow(this.plotGraphJPanel1.plotter_num, true);
-        refresh();
+        this.PostLoad(pd);
     }
-    
+
     /**
      * Loads an arrays into a single plot and displays it.
      *
      * @param name -- name of the plot
      * @param da -- double array to plot.
      */
-    public void LoadDoubleArray(String name, double da[]) {
+    public void Load(String name, double da[]) {
         //Clear();
         PlotData pd = new PlotData();
         pd.name = name;
@@ -2219,16 +2731,78 @@ public class PlotterTopComponent extends TopComponent {
         for (int i = 0; i < da.length; i++) {
             this.plotGraphJPanel1.AddPointToPlot(pd, i, da[i], true, i, da[i]);
         }
-
-        RecalculatePlots();
-        
-        pd.setShowAll(total_plotters, false);
-        pd.setShow(this.plotGraphJPanel1.plotter_num, true);
-        refresh();
-        if (auto_fit_to_graph) {
-            FitToGraph();
-        }
+        this.PostLoad(pd);
     }
+
+    /**
+     * Loads an arrays into a single plot and displays it.
+     *
+     * @param name -- name of the plot
+     * @param a -- int array to plot.
+     */
+    public void Load(String name, int a[]) {
+        //Clear();
+        PlotData pd = new PlotData();
+        pd.name = name;
+        this.plotGraphJPanel1.AddPlot(pd, name);
+        for (int i = 0; i < a.length; i++) {
+            this.plotGraphJPanel1.AddPointToPlot(pd, i, a[i], true, i, a[i]);
+        }
+        this.PostLoad(pd);
+    }
+
+    /**
+     * Loads an arrays into a single plot and displays it.
+     *
+     * @param name -- name of the plot
+     * @param a -- short array to plot.
+     */
+    public void Load(String name, short a[]) {
+        //Clear();
+        PlotData pd = new PlotData();
+        pd.name = name;
+        this.plotGraphJPanel1.AddPlot(pd, name);
+        for (int i = 0; i < a.length; i++) {
+            this.plotGraphJPanel1.AddPointToPlot(pd, i, a[i], true, i, a[i]);
+        }
+        this.PostLoad(pd);
+    }
+
+    /**
+     * Loads an arrays into a single plot and displays it.
+     *
+     * @param name -- name of the plot
+     * @param a -- long array to plot.
+     */
+    public void Load(String name, long a[]) {
+        //Clear();
+        PlotData pd = new PlotData();
+        pd.name = name;
+        this.plotGraphJPanel1.AddPlot(pd, name);
+        for (int i = 0; i < a.length; i++) {
+            this.plotGraphJPanel1.AddPointToPlot(pd, i, a[i], true, i, a[i]);
+        }
+        this.PostLoad(pd);
+    }
+
+    /**
+     * Loads an arrays into a single plot and displays it.
+     *
+     * @param name -- name of the plot
+     * @param a -- long array to plot.
+     */
+    public void Load(String name, boolean a[]) {
+        //Clear();
+        PlotData pd = new PlotData();
+        pd.name = name;
+        this.plotGraphJPanel1.AddPlot(pd, name);
+        for (int i = 0; i < a.length; i++) {
+            double val = (a[i] ? 1.0 : 0.0);
+            this.plotGraphJPanel1.AddPointToPlot(pd, i, val, true, i, val);
+        }
+        this.PostLoad(pd);
+    }
+
     private boolean nosplit = false;
 
     /**
@@ -2321,7 +2895,7 @@ public class PlotterTopComponent extends TopComponent {
             if (null != this.plotGraphJPanel1
                     && null != this.plotGraphJPanel1.plots
                     && this.plotGraphJPanel1.plots.size() > 3
-//                    && this.jComboBoxFunc.getSelectedIndex() == 0
+                    //                    && this.jComboBoxFunc.getSelectedIndex() == 0
                     && !fileName.endsWith(".xy")
                     && !this.nosplit) {
                 this.jToggleButtonSplit.setSelected(true);
@@ -2340,7 +2914,7 @@ public class PlotterTopComponent extends TopComponent {
 
         } catch (java.lang.OutOfMemoryError oome) {
             oome.printStackTrace();
-            System.out.println("max=" + Runtime.getRuntime().maxMemory() + ", total=" + Runtime.getRuntime().totalMemory() + ", free=" + Runtime.getRuntime().freeMemory());
+            //System.out.println("max=" + Runtime.getRuntime().maxMemory() + ", total=" + Runtime.getRuntime().totalMemory() + ", free=" + Runtime.getRuntime().freeMemory());
         }
 
     }
@@ -2517,7 +3091,6 @@ public class PlotterTopComponent extends TopComponent {
     private int function_selected = -1;
     private int function_argument = -1;
 
-
     private boolean checkXyzNameMatch(PlotData pd, String pd_name_upcase, String s1, String s2) {
         if (pd_name_upcase.endsWith(s1)) {
             String y_name = pd_name_upcase.substring(0, pd_name_upcase.length() - s1.length()) + s2;
@@ -2525,7 +3098,7 @@ public class PlotterTopComponent extends TopComponent {
             for (PlotData pd_for_find_y : this.plotGraphJPanel1.plots.values()) {
                 if (pd_for_find_y.name.toUpperCase().compareTo(y_name) == 0) {
                     pd.y_plot_data = pd_for_find_y;
-                    System.out.println(pd.name + " matches " + pd_for_find_y.name);
+                    //System.out.println(pd.name + " matches " + pd_for_find_y.name);
                     break;
                 }
             }
@@ -3116,7 +3689,7 @@ public class PlotterTopComponent extends TopComponent {
         try {
             point_added_since_check_recalc_plots = false;
             function_selected
-                    = FUNC_CHOICE_SINGLE;
+                    = FUNC_CHOICE_NORMAL;
 
             if (null == this.plotGraphJPanel1.keyVector || clearing_plots) {
                 return;
@@ -3366,12 +3939,14 @@ public class PlotterTopComponent extends TopComponent {
     private javax.swing.JButton jButton1;
     private javax.swing.JButton jButtonAxis;
     private javax.swing.JButton jButtonBackground;
+    private javax.swing.JButton jButtonClear;
     private javax.swing.JButton jButtonCloseOptions;
     private javax.swing.JButton jButtonDataClose;
     private javax.swing.JButton jButtonDataSave;
     private javax.swing.JButton jButtonDeleteMarked;
     private javax.swing.JButton jButtonGrid;
     private javax.swing.JButton jButtonHideAll;
+    private javax.swing.JButton jButtonPlot;
     private javax.swing.JButton jButtonShowAll;
     private javax.swing.JCheckBox jCheckBoxApplyAbsY;
     private javax.swing.JCheckBox jCheckBoxK2;
@@ -3390,6 +3965,7 @@ public class PlotterTopComponent extends TopComponent {
     private javax.swing.JLabel jLabelXScale;
     private javax.swing.JLabel jLabelYScale;
     private javax.swing.JPanel jPanel1;
+    private javax.swing.JProgressBar jProgressBar1;
     private javax.swing.JScrollBar jScrollBarHorz;
     private javax.swing.JScrollBar jScrollBarVert;
     private javax.swing.JScrollPane jScrollPane1;
