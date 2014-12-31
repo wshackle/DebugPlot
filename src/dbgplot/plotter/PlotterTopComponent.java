@@ -2081,6 +2081,13 @@ public class PlotterTopComponent extends TopComponent {
 
     private void plotGraphJPanel1MouseReleased(java.awt.event.MouseEvent evt)//GEN-FIRST:event_plotGraphJPanel1MouseReleased
     {//GEN-HEADEREND:event_plotGraphJPanel1MouseReleased
+        if (evt.isPopupTrigger()) {
+            plotGraphJPanel1.show_rect = false;
+            mouse_down = false;
+            popup_show(evt);
+            last_press_was_popup = true;
+            return;
+        }
         if (last_press_was_popup) {
             last_press_was_popup = false;
             return;
