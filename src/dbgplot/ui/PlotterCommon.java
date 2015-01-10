@@ -25,7 +25,7 @@
  *
  */
 
-package dbgplot.plotter;
+package dbgplot.ui;
 
 import java.awt.Color;
 import java.util.Enumeration;

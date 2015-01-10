@@ -25,7 +25,7 @@
  *
  */
 
-package dbgplot.plotter;
+package dbgplot.ui;
 
 /**
  *

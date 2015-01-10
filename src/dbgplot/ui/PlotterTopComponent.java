@@ -29,8 +29,10 @@
  *
  * Created on December 31, 2006, 6:53 AM
  */
-package dbgplot.plotter;
+package dbgplot.ui;
 
+import dbgplot.evaluator.spi.Evaluator;
+import dbgplot.evaluator.spi.Returner;
 import dbgplot.utils.SaveImage;
 import java.awt.Color;
 import java.awt.Container;
@@ -69,15 +71,15 @@ import javax.swing.JFrame;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
+import javax.swing.ProgressMonitor;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 import javax.swing.table.DefaultTableModel;
-import org.netbeans.api.debugger.*;
-import org.netbeans.api.debugger.jpda.JPDADebugger;
-import org.netbeans.api.debugger.jpda.ObjectVariable;
 import org.openide.awt.ActionID;
 import org.openide.awt.ActionReference;
+import org.openide.util.Lookup;
 import org.openide.util.NbBundle;
+import org.openide.util.RequestProcessor;
 import org.openide.windows.TopComponent;
 
 /**
@@ -132,6 +134,8 @@ public class PlotterTopComponent extends TopComponent {
     private File last_dir = null;
     private boolean point_added_since_check_recalc_plots = false;
 
+    private boolean showGetters = false;
+    
     /**
      * Creates new form plotter_NB_UI
      */
@@ -176,159 +180,178 @@ public class PlotterTopComponent extends TopComponent {
     }
     private boolean setup_options_table_done = false;
 
-    private String cleanName(String input) {
-        input = input.trim();
-        while (input.startsWith("\"")) {
-            input = input.substring(1).trim();
+    private void evaluateAndPlotPrivate2(final String expr, final String map,
+            final String mapped_expr) {
+        final ProgressMonitor pm = new ProgressMonitor(this, "Plotting " + mapped_expr, null, 0, 1);
+//        final Object result = new JDPAEvaluator().evaluate(expr,pm);
+        Returner r = new Returner() {
+
+            @Override
+            public void returnResult(final Object result) {
+                pm.close();
+                if (null != result) {
+                    java.awt.EventQueue.invokeLater(new Runnable() {
+
+                        @Override
+                        public void run() {
+                            setEvaluatedExpr(mapped_expr);
+                            setEvaluatedObject(result);
+                        }
+                    });
+                }
+            }
+        };
+        Collection<? extends Evaluator> evaluators
+                = Lookup.getDefault().lookupAll(Evaluator.class);
+        for (Evaluator evaluator : evaluators) {
+            if (evaluator.isValid()) {
+                evaluator.evaluate(expr, map, pm, r,showGetters);
+                return;
+            }
         }
-        while (input.endsWith("\"")) {
-            input = input.substring(0, input.length() - 1).trim();
-        }
-        return input;
     }
 
-    private void evaluateAndPlotPrivate(final String expr) {
-        try {
-            final DebuggerManager dm = DebuggerManager.getDebuggerManager();
-            if (null == dm) {
-                System.err.println("DebuggerManager.getDebuggerManager() == null");
-                return;
-            }
-            DebuggerEngine currentEngine = dm.getCurrentEngine();
-            if (currentEngine == null) {
-                System.err.println("currentEngine == null");
-                return;
-            }
-            final JPDADebugger d = currentEngine.lookupFirst(null, JPDADebugger.class);
-            if (d == null) {
-                System.err.println("JPDADebugger == null");
-                return;
-            }
-
-            ObjectVariable ov = (ObjectVariable) d.evaluate(expr);
-
-            //System.out.println("v = " + v);
-            //System.out.println(v.getType());
-            //System.out.println(v.getValue());
-            final Object mirror = ov.createMirrorObject();
-            //System.out.println("mirror = " + mirror);
-            if (mirror != null) {
-                java.awt.EventQueue.invokeLater(new Runnable() {
-
-                    @Override
-                    public void run() {
-                        setEvaluatedExpr(expr);
-                        setEvaluatedObject(mirror);
-                    }
-                });
-                return;
-            }
-            final List<Map<String, Object>> fakeMirror = new ArrayList<>();
-            org.netbeans.api.debugger.jpda.Field ovfa[] = ov.getFields(0, ov.getFieldsCount());
-//            System.out.println("ovfa = " + ovfa);
-            final boolean is_array = ov.getType().endsWith("[]");
-            final int n = is_array
-                    ?ov.getFieldsCount()
-                    :Integer.valueOf(ov.getField("size").getValue());
-            //System.out.println("n = " + n);
-//            org.netbeans.api.debugger.jpda.Field elementData = ov.getField("elementData");
-//            Object o = elementData.createMirrorObject();
-            java.awt.EventQueue.invokeLater(new Runnable() {
-
-                @Override
-                public void run() {
-                    jProgressBar1.setMaximum(n);
-                }
-            });
-            for (int i = 0; i < n; i++) {
-                final int icopy = i;
-                java.awt.EventQueue.invokeLater(new Runnable() {
-
-                    @Override
-                    public void run() {
-                        jProgressBar1.setValue(icopy);
-                    }
-                });
-                ObjectVariable elem_ov = 
-                        is_array
-                        ?(ObjectVariable) ovfa[i]//d.evaluate(expr + "[" + i + "]")
-                        :(ObjectVariable) d.evaluate(expr + ".get(" + i + ")");
-//                final String fn_expr = expr + ".get(" + i + ").getClass().getFields().length";
-//                final int fn = Integer.valueOf(d.evaluate(fn_expr).getValue());
-                final int fn = elem_ov.getFieldsCount();
-                final Map<String, Object> map = new HashMap<>();
-                org.netbeans.api.debugger.jpda.Field fa[] = elem_ov.getFields(0, fn);
-                for (int j = 0; j < fa.length; j++) {
-                    try {
-                        final String name = fa[j].getName();
-//                    final String name_expr = expr + ".get(" + i + ").getClass().getFields()[" + j + "].getName()";
-//                    final String name = cleanName(d.evaluate(name_expr).getValue());
-                        //System.out.println("name = " + name);
-                        final Double D = Double.valueOf(fa[j].getValue());
-//                    final Variable fv = d.evaluate(expr + ".get(" + i + ")." + name);
-//                    //System.out.println("fv = " + fv);
-//                    final Object eov = fv.createMirrorObject();
-                        //System.out.println("ov = " + ov);
-                        map.put(name, D);
-                    } catch (Exception exception) {
-                        // ignore
-                    }
-                }
-                org.netbeans.api.debugger.jpda.Field ifa[] = elem_ov.getInheritedFields(0, 100);
-                for (int j = 0; j < ifa.length; j++) {
-                    try {
-                        final String name = ifa[j].getName();
-//                    final String name_expr = expr + ".get(" + i + ").getClass().getFields()[" + j + "].getName()";
-//                    final String name = cleanName(d.evaluate(name_expr).getValue());
-                        //System.out.println("name = " + name);
-                        final Double D = Double.valueOf(ifa[j].getValue());
-//                    final Variable fv = d.evaluate(expr + ".get(" + i + ")." + name);
-//                    //System.out.println("fv = " + fv);
-//                    final Object eov = fv.createMirrorObject();
-                        //System.out.println("ov = " + ov);
-                        map.put(name, D);
-                    } catch (Exception exception) {
-                        // ignore
-                    }
-                }
-//                final String mn_expr = expr + ".get(" + i + ").getClass().getMethods().length";
-//                final int mn = Integer.valueOf(d.evaluate(mn_expr).getValue());
-//                for (int k = 0; k < mn; k++) {
-//                    final String name_expr = expr + ".get(" + i + ").getClass().getMethods()[" + k + "].getName()";
-//                    final String name = cleanName(d.evaluate(name_expr).getValue());
-//                    //System.out.println("name = " + name);
-//                    if(!name.startsWith("get")) {
-//                        continue;
+//    private void evaluateAndPlotPrivate(final String expr) {
+//        try {
+//            final DebuggerManager dm = DebuggerManager.getDebuggerManager();
+//            if (null == dm) {
+//                System.err.println("DebuggerManager.getDebuggerManager() == null");
+//                return;
+//            }
+//            DebuggerEngine currentEngine = dm.getCurrentEngine();
+//            if (currentEngine == null) {
+//                System.err.println("currentEngine == null");
+//                return;
+//            }
+//            final JPDADebugger d = currentEngine.lookupFirst(null, JPDADebugger.class);
+//            if (d == null) {
+//                System.err.println("JPDADebugger == null");
+//                return;
+//            }
+//
+//            ObjectVariable ov = (ObjectVariable) d.evaluate(expr);
+//
+//            //System.out.println("v = " + v);
+//            //System.out.println(v.getType());
+//            //System.out.println(v.getValue());
+//            final Object mirror = ov.createMirrorObject();
+//            //System.out.println("mirror = " + mirror);
+//            if (mirror != null) {
+//                java.awt.EventQueue.invokeLater(new Runnable() {
+//
+//                    @Override
+//                    public void run() {
+//                        setEvaluatedExpr(expr);
+//                        setEvaluatedObject(mirror);
 //                    }
-//                    final String param_count_expr =
-//                            expr + ".get(" + i + ").getClass().getMethods()[" + k + "].getParameterCount()";
-//                    final int param_count = Integer.valueOf(d.evaluate(param_count_expr).getValue());
-//                    if(param_count != 0) {
-//                        continue;
-//                    }
-//                    //System.out.println("name = " + name);
-//                    final Variable return_fv = d.evaluate(expr + ".get(" + i + ")." + name+"()");
-//                    //System.out.println("fv = " + fv);
-//                    final Object return_ov = return_fv.createMirrorObject();
-//                    //System.out.println("ov = " + ov);
-//                    map.put(name.substring(3), return_ov);
+//                });
+//                return;
+//            }
+//            final List<Map<String, Object>> fakeMirror = new ArrayList<>();
+//            org.netbeans.api.debugger.jpda.Field ovfa[] = ov.getFields(0, ov.getFieldsCount());
+////            System.out.println("ovfa = " + ovfa);
+//            final boolean is_array = ov.getType().endsWith("[]");
+//            final int n = is_array
+//                    ? ov.getFieldsCount()
+//                    : Integer.valueOf(ov.getField("size").getValue());
+//            //System.out.println("n = " + n);
+////            org.netbeans.api.debugger.jpda.Field elementData = ov.getField("elementData");
+////            Object o = elementData.createMirrorObject();
+//            java.awt.EventQueue.invokeLater(new Runnable() {
+//
+//                @Override
+//                public void run() {
+//                    jProgressBar1.setMaximum(n);
 //                }
-                fakeMirror.add(map);
-            }
-            //System.out.println("fakeMirror = " + fakeMirror);
-            java.awt.EventQueue.invokeLater(new Runnable() {
-
-                @Override
-                public void run() {
-                    setEvaluatedExpr(expr);
-                    setEvaluatedObject(fakeMirror);
-                }
-            });
-        } catch (Exception exception) {
-            exception.printStackTrace();
-        }
-    }
-
+//            });
+//            for (int i = 0; i < n; i++) {
+//                final int icopy = i;
+//                java.awt.EventQueue.invokeLater(new Runnable() {
+//
+//                    @Override
+//                    public void run() {
+//                        jProgressBar1.setValue(icopy);
+//                    }
+//                });
+//                ObjectVariable elem_ov
+//                        = is_array
+//                                ? (ObjectVariable) ovfa[i]//d.evaluate(expr + "[" + i + "]")
+//                                : (ObjectVariable) d.evaluate(expr + ".get(" + i + ")");
+////                final String fn_expr = expr + ".get(" + i + ").getClass().getFields().length";
+////                final int fn = Integer.valueOf(d.evaluate(fn_expr).getValue());
+//                final int fn = elem_ov.getFieldsCount();
+//                final Map<String, Object> map = new HashMap<>();
+//                org.netbeans.api.debugger.jpda.Field fa[] = elem_ov.getFields(0, fn);
+//                for (int j = 0; j < fa.length; j++) {
+//                    try {
+//                        final String name = fa[j].getName();
+////                    final String name_expr = expr + ".get(" + i + ").getClass().getFields()[" + j + "].getName()";
+////                    final String name = cleanName(d.evaluate(name_expr).getValue());
+//                        //System.out.println("name = " + name);
+//                        final Double D = Double.valueOf(fa[j].getValue());
+////                    final Variable fv = d.evaluate(expr + ".get(" + i + ")." + name);
+////                    //System.out.println("fv = " + fv);
+////                    final Object eov = fv.createMirrorObject();
+//                        //System.out.println("ov = " + ov);
+//                        map.put(name, D);
+//                    } catch (Exception exception) {
+//                        // ignore
+//                    }
+//                }
+//                org.netbeans.api.debugger.jpda.Field ifa[] = elem_ov.getInheritedFields(0, 100);
+//                for (int j = 0; j < ifa.length; j++) {
+//                    try {
+//                        final String name = ifa[j].getName();
+////                    final String name_expr = expr + ".get(" + i + ").getClass().getFields()[" + j + "].getName()";
+////                    final String name = cleanName(d.evaluate(name_expr).getValue());
+//                        //System.out.println("name = " + name);
+//                        final Double D = Double.valueOf(ifa[j].getValue());
+////                    final Variable fv = d.evaluate(expr + ".get(" + i + ")." + name);
+////                    //System.out.println("fv = " + fv);
+////                    final Object eov = fv.createMirrorObject();
+//                        //System.out.println("ov = " + ov);
+//                        map.put(name, D);
+//                    } catch (Exception exception) {
+//                        // ignore
+//                    }
+//                }
+////                final String mn_expr = expr + ".get(" + i + ").getClass().getMethods().length";
+////                final int mn = Integer.valueOf(d.evaluate(mn_expr).getValue());
+////                for (int k = 0; k < mn; k++) {
+////                    final String name_expr = expr + ".get(" + i + ").getClass().getMethods()[" + k + "].getName()";
+////                    final String name = cleanName(d.evaluate(name_expr).getValue());
+////                    //System.out.println("name = " + name);
+////                    if(!name.startsWith("get")) {
+////                        continue;
+////                    }
+////                    final String param_count_expr =
+////                            expr + ".get(" + i + ").getClass().getMethods()[" + k + "].getParameterCount()";
+////                    final int param_count = Integer.valueOf(d.evaluate(param_count_expr).getValue());
+////                    if(param_count != 0) {
+////                        continue;
+////                    }
+////                    //System.out.println("name = " + name);
+////                    final Variable return_fv = d.evaluate(expr + ".get(" + i + ")." + name+"()");
+////                    //System.out.println("fv = " + fv);
+////                    final Object return_ov = return_fv.createMirrorObject();
+////                    //System.out.println("ov = " + ov);
+////                    map.put(name.substring(3), return_ov);
+////                }
+//                fakeMirror.add(map);
+//            }
+//            //System.out.println("fakeMirror = " + fakeMirror);
+//            java.awt.EventQueue.invokeLater(new Runnable() {
+//
+//                @Override
+//                public void run() {
+//                    setEvaluatedExpr(expr);
+//                    setEvaluatedObject(fakeMirror);
+//                }
+//            });
+//        } catch (Exception exception) {
+//            exception.printStackTrace();
+//        }
+//    }
     private String evaluatedExpr;
 
     /**
@@ -410,16 +433,23 @@ public class PlotterTopComponent extends TopComponent {
         }
     }
 
-    public void evaluateAndPlot(final String expr) {
+    public void evaluateAndPlot(final String expr, final String map) {
         this.jTextFieldEvalExpr.setEditable(false);
         this.jTextFieldEvalExpr.setEnabled(false);
+        this.jTextFieldMap.setEditable(false);
+        this.jTextFieldMap.setEnabled(false);
         this.jButtonPlot.setEnabled(false);
-        new Thread(new Runnable() {
+        final String mapped_expr
+                = (map == null || map.trim().length() < 1)
+                        ? expr
+                        : expr + ".map(" + map + ")";
+        RequestProcessor rp = new RequestProcessor(mapped_expr);
+        rp.post(new Runnable() {
 
             @Override
             public void run() {
                 try {
-                    evaluateAndPlotPrivate(expr);
+                    evaluateAndPlotPrivate2(expr.trim(), map.trim(), mapped_expr);
                 } catch (Exception e) {
                     // ignore
                 } finally {
@@ -429,12 +459,14 @@ public class PlotterTopComponent extends TopComponent {
                         public void run() {
                             jTextFieldEvalExpr.setEditable(true);
                             jTextFieldEvalExpr.setEnabled(true);
+                            jTextFieldMap.setEditable(true);
+                            jTextFieldMap.setEnabled(true);
                             jButtonPlot.setEnabled(true);
                         }
                     });
                 }
             }
-        }).start();
+        });
     }
 
     private void SetupOptionsTable() {
@@ -566,7 +598,7 @@ public class PlotterTopComponent extends TopComponent {
         jButtonDataClose = new javax.swing.JButton();
         jButtonDataSave = new javax.swing.JButton();
         jScrollBarVert = new javax.swing.JScrollBar();
-        plotGraphJPanel1 = new dbgplot.plotter.PlotGraphJPanel();
+        plotGraphJPanel1 = new dbgplot.ui.PlotGraphJPanel();
         jLabel1 = new javax.swing.JLabel();
         jScrollBarHorz = new javax.swing.JScrollBar();
         jLabel2 = new javax.swing.JLabel();
@@ -584,7 +616,8 @@ public class PlotterTopComponent extends TopComponent {
         jToggleButtonSplit = new javax.swing.JToggleButton();
         jButtonClear = new javax.swing.JButton();
         jButtonPlot = new javax.swing.JButton();
-        jProgressBar1 = new javax.swing.JProgressBar();
+        jLabel9 = new javax.swing.JLabel();
+        jTextFieldMap = new javax.swing.JTextField();
 
         jFrameOptions.setTitle("Plotter Options");
         jFrameOptions.setMinimumSize(new java.awt.Dimension(500, 400));
@@ -975,6 +1008,8 @@ public class PlotterTopComponent extends TopComponent {
             }
         });
 
+        jLabel9.setText("Map:");
+
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(this);
         this.setLayout(layout);
         layout.setHorizontalGroup(
@@ -995,7 +1030,13 @@ public class PlotterTopComponent extends TopComponent {
                             .addComponent(jLabel1)
                             .addComponent(jLabel8, javax.swing.GroupLayout.Alignment.TRAILING))
                         .addGap(18, 18, 18)
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addGroup(layout.createSequentialGroup()
+                                .addComponent(jTextFieldEvalExpr)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(jLabel9)
+                                .addGap(4, 4, 4)
+                                .addComponent(jTextFieldMap, javax.swing.GroupLayout.PREFERRED_SIZE, 94, javax.swing.GroupLayout.PREFERRED_SIZE))
                             .addGroup(layout.createSequentialGroup()
                                 .addComponent(jTextFieldYMax, javax.swing.GroupLayout.PREFERRED_SIZE, 38, javax.swing.GroupLayout.PREFERRED_SIZE)
                                 .addGap(6, 6, 6)
@@ -1013,12 +1054,8 @@ public class PlotterTopComponent extends TopComponent {
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                 .addComponent(jLabel4)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jTextFieldXMax, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
-                            .addGroup(layout.createSequentialGroup()
-                                .addComponent(jTextFieldEvalExpr)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jProgressBar1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)))
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(jTextFieldXMax, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
                             .addGroup(javax.swing.GroupLayout.Alignment.LEADING, layout.createSequentialGroup()
                                 .addComponent(jButton1)
@@ -1038,7 +1075,7 @@ public class PlotterTopComponent extends TopComponent {
             .addGroup(layout.createSequentialGroup()
                 .addContainerGap()
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addComponent(jScrollBarVert, javax.swing.GroupLayout.DEFAULT_SIZE, 86, Short.MAX_VALUE)
+                    .addComponent(jScrollBarVert, javax.swing.GroupLayout.DEFAULT_SIZE, 77, Short.MAX_VALUE)
                     .addComponent(plotGraphJPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(jScrollBarHorz, javax.swing.GroupLayout.PREFERRED_SIZE, 13, javax.swing.GroupLayout.PREFERRED_SIZE)
@@ -1061,12 +1098,12 @@ public class PlotterTopComponent extends TopComponent {
                     .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                         .addComponent(jTextFieldEvalExpr)
                         .addComponent(jButtonClear)
-                        .addComponent(jButtonPlot))
+                        .addComponent(jButtonPlot)
+                        .addComponent(jLabel9)
+                        .addComponent(jTextFieldMap, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                     .addGroup(layout.createSequentialGroup()
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(jLabel8)
-                            .addComponent(jProgressBar1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
-                        .addContainerGap())))
+                        .addComponent(jLabel8)
+                        .addContainerGap(24, Short.MAX_VALUE))))
         );
     }// </editor-fold>//GEN-END:initComponents
     private boolean auto_fit_to_graph = true;
@@ -2017,6 +2054,16 @@ public class PlotterTopComponent extends TopComponent {
             }
         });
         jpop.add(jpopSpreadSheetMenuItem);
+        final JCheckBoxMenuItem jpopShowGetters = new JCheckBoxMenuItem("Show Getters");
+        jpopShowGetters.setSelected(showGetters);
+        jpopShowGetters.addActionListener(new ActionListener() {
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                showGetters = jpopShowGetters.isSelected();
+            }
+        });
+        jpop.add(jpopShowGetters);
     }
 
     private void popup_show(java.awt.event.MouseEvent evt) {
@@ -2408,7 +2455,8 @@ public class PlotterTopComponent extends TopComponent {
         }//GEN-LAST:event_jCheckBoxApplyAbsYActionPerformed
 
     private void jTextFieldEvalExprActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jTextFieldEvalExprActionPerformed
-        this.evaluateAndPlot(this.jTextFieldEvalExpr.getText());
+        this.evaluateAndPlot(this.jTextFieldEvalExpr.getText(),
+                this.jTextFieldMap.getText());
     }//GEN-LAST:event_jTextFieldEvalExprActionPerformed
 
     private void jButtonClearActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButtonClearActionPerformed
@@ -2416,7 +2464,8 @@ public class PlotterTopComponent extends TopComponent {
     }//GEN-LAST:event_jButtonClearActionPerformed
 
     private void jButtonPlotActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButtonPlotActionPerformed
-        this.evaluateAndPlot(this.jTextFieldEvalExpr.getText());
+        this.evaluateAndPlot(this.jTextFieldEvalExpr.getText(),
+                this.jTextFieldMap.getText());
     }//GEN-LAST:event_jButtonPlotActionPerformed
     private PlotLoader pl = null;
 
@@ -2526,7 +2575,7 @@ public class PlotterTopComponent extends TopComponent {
         RecalculatePlots();
 
 //        pd.setShowAll(total_plotters, false);
-        if(null != pd) {
+        if (null != pd) {
             pd.setShow(this.plotGraphJPanel1.plotter_num, true);
         }
         refresh();
@@ -2553,14 +2602,38 @@ public class PlotterTopComponent extends TopComponent {
      */
     public void Load(String name, List<?> l) {
         //Clear();
-        PlotData pd = new PlotData();
-        pd.name = name;
-        this.plotGraphJPanel1.AddPlot(pd, name);
+        PlotData pd = null;
+        boolean isnull[] = new boolean[l.size()];
+        boolean isnan[] = new boolean[l.size()];
+        boolean isposinf[] = new boolean[l.size()];
+        boolean isneginf[] = new boolean[l.size()];
+        int isnull_count = 0;
+        int isnan_count = 0;
+        int isposinf_count = 0;
+        int isneginf_count = 0;
         Map<String, PlotData> subFieldsMap = new HashMap<String, PlotData>();
         for (int i = 0; i < l.size(); i++) {
             try {
                 Set<String> fieldsUsed = new HashSet<String>();
                 Object o = l.get(i);
+                if (o == null) {
+                    isnull[i] = true;
+                    isnull_count++;
+                    continue;
+                } else {
+                    isnull[i] = false;
+                }
+                if(o instanceof Boolean) {
+                    Boolean bval = (Boolean) o;
+                    double val = bval?1.0:0.0;
+                    if (pd == null) {
+                        pd = new PlotData();
+                        pd.name = name;
+                        this.plotGraphJPanel1.AddPlot(pd, name);
+                    }
+                    this.plotGraphJPanel1.AddPointToPlot(pd, i, val, true, i, val);
+                    continue;
+                }
                 Class<?> c = o.getClass();
                 if (Map.class.isAssignableFrom(c)) {
                     Map m = (Map) o;
@@ -2601,8 +2674,69 @@ public class PlotterTopComponent extends TopComponent {
                 }
                 if (null != toDouble) {
                     double val = (Double) toDouble.invoke(o);
+                    
+                    if (Double.isNaN(val)) {
+                        isnan[i] = true;
+                        isnan_count++;
+                        continue;
+                    } else {
+                        isnan[i] = false;
+                    }
+                    if (Double.isInfinite(val)) {
+                        if (val > 0) {
+                            isposinf[i] = true;
+                            isneginf[i] = false;
+                            isposinf_count++;
+                        } else {
+                            isneginf[i] = true;
+                            isposinf[i] = false;
+                            isneginf_count++;
+                        }
+                        continue;
+                    } else {
+                        isposinf[i] = false;
+                        isneginf[i] = false;
+                    }
+                    if (pd == null) {
+                        pd = new PlotData();
+                        pd.name = name;
+                        this.plotGraphJPanel1.AddPlot(pd, name);
+                    }
                     this.plotGraphJPanel1.AddPointToPlot(pd, i, val, true, i, val);
                 } else {
+                    try {
+                        double val = Double.valueOf(o.toString());
+                        if (Double.isNaN(val)) {
+                            isnan[i] = true;
+                            isnan_count++;
+                            continue;
+                        } else {
+                            isnan[i] = false;
+                        }
+                        if (Double.isInfinite(val)) {
+                            if (val > 0) {
+                                isposinf[i] = true;
+                                isneginf[i] = false;
+                                isposinf_count++;
+                            } else {
+                                isneginf[i] = true;
+                                isposinf[i] = false;
+                                isneginf_count++;
+                            }
+                            continue;
+                        } else {
+                            isposinf[i] = false;
+                            isneginf[i] = false;
+                        }
+                        if (pd == null) {
+                            pd = new PlotData();
+                            pd.name = name;
+                            this.plotGraphJPanel1.AddPlot(pd, name);
+                        }
+                        this.plotGraphJPanel1.AddPointToPlot(pd, i, val, true, i, val);
+                    } catch (Exception e) {
+                        // ignore
+                    }
                     Field fa[] = c.getFields();
                     for (Field f : fa) {
                         final String fname = f.getName();
@@ -2646,7 +2780,7 @@ public class PlotterTopComponent extends TopComponent {
                         if (!mname.startsWith("get")) {
                             continue;
                         }
-                        if (m.getParameterCount() != 0) {
+                        if (m.getParameterTypes().length != 0) {
                             continue;
                         }
                         if (m.getReturnType().equals(Void.TYPE)
@@ -2692,11 +2826,25 @@ public class PlotterTopComponent extends TopComponent {
                 exception.printStackTrace();
             }
         }
-        if(pd.get_num_points() < 1) {
-            this.plotGraphJPanel1.RemovePlot(pd.name);
+        if (null == pd || pd.get_num_points() < 1) {
+            if (null != pd) {
+                this.plotGraphJPanel1.RemovePlot(pd.name);
+            }
             this.PostLoad(null);
         } else {
             this.PostLoad(pd);
+        }
+        if(isnull_count > 0) {
+            this.Load(name+".map(_==null)", isnull);
+        }
+        if(isnan_count > 0) {
+            this.Load(name+".map(Double.isnan(_))", isnan);
+        }
+        if(isposinf_count > 0) {
+            this.Load(name+".map(_==Double.POSITIVE_INFINITY)", isposinf);
+        }
+        if(isneginf_count > 0) {
+            this.Load(name+".map(_==Double.NEGATIVE_INFINITY)", isneginf);
         }
     }
 
@@ -3962,10 +4110,10 @@ public class PlotterTopComponent extends TopComponent {
     private javax.swing.JLabel jLabel6;
     private javax.swing.JLabel jLabel7;
     private javax.swing.JLabel jLabel8;
+    private javax.swing.JLabel jLabel9;
     private javax.swing.JLabel jLabelXScale;
     private javax.swing.JLabel jLabelYScale;
     private javax.swing.JPanel jPanel1;
-    private javax.swing.JProgressBar jProgressBar1;
     private javax.swing.JScrollBar jScrollBarHorz;
     private javax.swing.JScrollBar jScrollBarVert;
     private javax.swing.JScrollPane jScrollPane1;
@@ -3973,15 +4121,16 @@ public class PlotterTopComponent extends TopComponent {
     private javax.swing.JTable jTableData;
     private javax.swing.JTable jTableOptions;
     private javax.swing.JTextField jTextFieldEvalExpr;
+    private javax.swing.JTextField jTextFieldMap;
     private javax.swing.JTextField jTextFieldXMax;
     private javax.swing.JTextField jTextFieldXMin;
     private javax.swing.JTextField jTextFieldYMax;
     private javax.swing.JTextField jTextFieldYMin;
     private javax.swing.JToggleButton jToggleButtonSplit;
-    private dbgplot.plotter.PlotGraphJPanel plotGraphJPanel1;
+    private dbgplot.ui.PlotGraphJPanel plotGraphJPanel1;
     // End of variables declaration//GEN-END:variables
-    private dbgplot.plotter.PlotGraphJPanel fullScreenPlotGraphJPanel = null;
-    private dbgplot.plotter.PlotGraphJPanel cur_pgjp = null;
+    private dbgplot.ui.PlotGraphJPanel fullScreenPlotGraphJPanel = null;
+    private dbgplot.ui.PlotGraphJPanel cur_pgjp = null;
     private String plot_order = null;
 
     /**

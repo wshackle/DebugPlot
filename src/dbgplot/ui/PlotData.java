@@ -21,7 +21,7 @@ versions bear some notice that they have been modified.
 
 
  */
-package dbgplot.plotter;
+package dbgplot.ui;
 
 import java.util.Vector;
 import java.awt.Color;

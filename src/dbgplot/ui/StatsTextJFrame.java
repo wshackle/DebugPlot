@@ -4,7 +4,7 @@
  * Created on May 24, 2010, 11:18:48 AM
  */
 
-package dbgplot.plotter;
+package dbgplot.ui;
 
 /**
  *

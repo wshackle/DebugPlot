@@ -21,7 +21,7 @@ versions bear some notice that they have been modified.
 
 
  */
-package dbgplot.plotter;
+package dbgplot.ui;
 
 import java.util.Hashtable;
 import java.util.Enumeration;

@@ -24,7 +24,7 @@
  * versions bear some notice that they have been modified.
  *
  */
-package dbgplot.plotter;
+package dbgplot.ui;
 
 import dbgplot.utils.URLLoadInfoPanelInterface;
 import java.io.BufferedReader;
