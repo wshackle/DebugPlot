@@ -27,8 +27,7 @@ other languages but only if that debugger was implemented via JDPA Debugger.
 The map text field optionally modifies each element of the array or list before 
 plotting. If no "_" variable occurs in the string the string is appended to the element.
 
-Examples
-=======
+Example uses of map string:
 
 Map String | Effect
 ---------- | ---------
