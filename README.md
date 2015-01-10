@@ -33,13 +33,9 @@ Examples
 Map String | Effect
 ---------- | ---------
     .pz | just get pz element of objects in list
-
     + 5 | add 5 to every element in list
-
     Math.abs(_) | take the absolute value of each element in the list
-
     < 0.5 | plot 1.0 for values less than 0.5 and 0.0 otherwise
-
     _ < 0.5 ? _ : null | plot the original value if it less than 0.5 otherwise skip
 
 
