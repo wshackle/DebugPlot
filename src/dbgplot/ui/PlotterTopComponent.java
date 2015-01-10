@@ -80,6 +80,9 @@ import org.openide.awt.ActionReference;
 import org.openide.util.Lookup;
 import org.openide.util.NbBundle;
 import org.openide.util.RequestProcessor;
+import org.openide.windows.IOProvider;
+import org.openide.windows.InputOutput;
+import org.openide.windows.OutputWriter;
 import org.openide.windows.TopComponent;
 
 /**
@@ -95,7 +98,7 @@ import org.openide.windows.TopComponent;
 @TopComponent.Description(
         preferredID = "PlotterTopComponent",
         iconBase = "dbgplot/ploticon.png",
-        persistenceType = TopComponent.PERSISTENCE_ALWAYS
+        persistenceType = TopComponent.PERSISTENCE_NEVER
 )
 @TopComponent.Registration(mode = "output", openAtStartup = false)
 @ActionID(category = "Window", id = "dbgplot.plotter.PlotterTopComponent")
@@ -135,6 +138,24 @@ public class PlotterTopComponent extends TopComponent {
     private boolean point_added_since_check_recalc_plots = false;
 
     private boolean showGetters = false;
+
+    private static void printString(String s) {
+        InputOutput io = IOProvider.getDefault().getIO("PlotterTopComponent", false);
+//        io.select();
+        OutputWriter writer = io.getOut();
+        writer.println(s);
+        writer.close();
+        System.err.println(s);
+    }
+
+    private static void printThrowable(Throwable t) {
+        InputOutput io = IOProvider.getDefault().getIO("PlotterTopComponent", false);
+        io.select();
+        OutputWriter writer = io.getOut();
+        t.printStackTrace(writer);
+        writer.close();
+        t.printStackTrace();
+    }
     
     /**
      * Creates new form plotter_NB_UI
@@ -205,10 +226,11 @@ public class PlotterTopComponent extends TopComponent {
                 = Lookup.getDefault().lookupAll(Evaluator.class);
         for (Evaluator evaluator : evaluators) {
             if (evaluator.isValid()) {
-                evaluator.evaluate(expr, map, pm, r,showGetters);
+                evaluator.evaluate(expr, map, pm, r, showGetters);
                 return;
             }
         }
+        printString("No valid evaluator found.");
     }
 
 //    private void evaluateAndPlotPrivate(final String expr) {
@@ -434,6 +456,7 @@ public class PlotterTopComponent extends TopComponent {
     }
 
     public void evaluateAndPlot(final String expr, final String map) {
+        printString("evaluateAndPlot(\""+expr+"\",\""+map+"\")");
         this.jTextFieldEvalExpr.setEditable(false);
         this.jTextFieldEvalExpr.setEnabled(false);
         this.jTextFieldMap.setEditable(false);
@@ -479,7 +502,7 @@ public class PlotterTopComponent extends TopComponent {
             AddOptionsTableListener();
 
         } catch (Exception e) {
-            e.printStackTrace();
+            printThrowable(e);
         }
     }
 
@@ -1367,7 +1390,7 @@ public class PlotterTopComponent extends TopComponent {
                 ps.println();
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            printThrowable(e);
         }
     }
 
@@ -1479,7 +1502,7 @@ public class PlotterTopComponent extends TopComponent {
 //            this.jToggleButtonLockDisplay.setSelected(true);
             mouse_down = false;
         } catch (Exception e) {
-            e.printStackTrace();
+            printThrowable(e);
         }
     }//GEN-LAST:event_jTextFieldXMaxActionPerformed
 
@@ -1503,7 +1526,7 @@ public class PlotterTopComponent extends TopComponent {
 //            this.jToggleButtonLockDisplay.setSelected(true);
             mouse_down = false;
         } catch (Exception e) {
-            e.printStackTrace();
+            printThrowable(e);
         }
     }//GEN-LAST:event_jTextFieldXMinActionPerformed
 
@@ -1527,7 +1550,7 @@ public class PlotterTopComponent extends TopComponent {
 //            this.jToggleButtonLockDisplay.setSelected(true);
             mouse_down = false;
         } catch (Exception e) {
-            e.printStackTrace();
+            printThrowable(e);
         }
     }//GEN-LAST:event_jTextFieldYMinActionPerformed
 
@@ -1551,7 +1574,7 @@ public class PlotterTopComponent extends TopComponent {
 //            this.jToggleButtonLockDisplay.setSelected(true);
             mouse_down = false;
         } catch (Exception e) {
-            e.printStackTrace();
+            printThrowable(e);
         }
     }//GEN-LAST:event_jTextFieldYMaxActionPerformed
 
@@ -1617,7 +1640,7 @@ public class PlotterTopComponent extends TopComponent {
             this.jTextFieldYMin.setEnabled(!plotGraphJPanel1.s_mode);
             refresh();
         } catch (Exception e) {
-            e.printStackTrace();
+            printThrowable(e);
         }
     }
 
@@ -1650,7 +1673,7 @@ public class PlotterTopComponent extends TopComponent {
 //            jToggleButtonPause.setSelected(false);
             mouse_down = false;
         } catch (Exception e) {
-            e.printStackTrace();
+            printThrowable(e);
         } finally {
             clearing_plots = false;
         }
@@ -1757,7 +1780,7 @@ public class PlotterTopComponent extends TopComponent {
                 JFrame jf = (JFrame) c;
                 jf.pack();
             } catch (Exception e) {
-                e.printStackTrace();
+                printThrowable(e);
             }
         }
     }
@@ -2078,7 +2101,7 @@ public class PlotterTopComponent extends TopComponent {
                 jpop.show(evt.getComponent(), evt.getX(), evt.getY());
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            printThrowable(e);
         }
     }
 
@@ -2086,19 +2109,15 @@ public class PlotterTopComponent extends TopComponent {
     {//GEN-HEADEREND:event_plotGraphJPanel1MouseClicked
         if (evt.isPopupTrigger()) {
             plotGraphJPanel1.show_rect = false;
-            mouse_down
-                    = false;
+            mouse_down= false;
             popup_show(evt);
             return;
-
         }
 
         plotGraphJPanel1.mouseClicked(evt);
 //        this.jToggleButtonLockDisplay.setSelected(true);
         refresh();
-
-        mouse_down
-                = false;
+        mouse_down= false;
     }//GEN-LAST:event_plotGraphJPanel1MouseClicked
     private boolean last_press_was_popup = false;
 
@@ -2106,11 +2125,9 @@ public class PlotterTopComponent extends TopComponent {
     {//GEN-HEADEREND:event_plotGraphJPanel1MousePressed
         if (evt.isPopupTrigger()) {
             plotGraphJPanel1.show_rect = false;
-            mouse_down
-                    = false;
+            mouse_down= false;
             popup_show(evt);
-            last_press_was_popup
-                    = true;
+            last_press_was_popup= true;
             return;
 
         }
@@ -2119,15 +2136,18 @@ public class PlotterTopComponent extends TopComponent {
 //        this.jToggleButtonLockDisplay.setSelected(true);
         refresh();
 
-        mouse_down
-                = false;
-        last_press_was_popup
-                = false;
-
+        mouse_down= false;
+        last_press_was_popup= false;
     }//GEN-LAST:event_plotGraphJPanel1MousePressed
 
     private void plotGraphJPanel1MouseReleased(java.awt.event.MouseEvent evt)//GEN-FIRST:event_plotGraphJPanel1MouseReleased
     {//GEN-HEADEREND:event_plotGraphJPanel1MouseReleased
+        if (evt.isPopupTrigger()) {
+            plotGraphJPanel1.show_rect = false;
+            mouse_down = false;
+            popup_show(evt);
+            return;
+        }
         if (last_press_was_popup) {
             last_press_was_popup = false;
             return;
@@ -2136,7 +2156,6 @@ public class PlotterTopComponent extends TopComponent {
         if (cur_pgjp.rescale_to_selected_rectangle_needed) {
 //            this.jToggleButtonLockDisplay.setSelected(true);
             SetScaleToSelectedRect();
-
         }
 
         refresh();
@@ -2623,9 +2642,9 @@ public class PlotterTopComponent extends TopComponent {
                 } else {
                     isnull[i] = false;
                 }
-                if(o instanceof Boolean) {
+                if (o instanceof Boolean) {
                     Boolean bval = (Boolean) o;
-                    double val = bval?1.0:0.0;
+                    double val = bval ? 1.0 : 0.0;
                     if (pd == null) {
                         pd = new PlotData();
                         pd.name = name;
@@ -2674,7 +2693,7 @@ public class PlotterTopComponent extends TopComponent {
                 }
                 if (null != toDouble) {
                     double val = (Double) toDouble.invoke(o);
-                    
+
                     if (Double.isNaN(val)) {
                         isnan[i] = true;
                         isnan_count++;
@@ -2834,17 +2853,17 @@ public class PlotterTopComponent extends TopComponent {
         } else {
             this.PostLoad(pd);
         }
-        if(isnull_count > 0) {
-            this.Load(name+".map(_==null)", isnull);
+        if (isnull_count > 0) {
+            this.Load(name + ".map(_==null)", isnull);
         }
-        if(isnan_count > 0) {
-            this.Load(name+".map(Double.isnan(_))", isnan);
+        if (isnan_count > 0) {
+            this.Load(name + ".map(Double.isnan(_))", isnan);
         }
-        if(isposinf_count > 0) {
-            this.Load(name+".map(_==Double.POSITIVE_INFINITY)", isposinf);
+        if (isposinf_count > 0) {
+            this.Load(name + ".map(_==Double.POSITIVE_INFINITY)", isposinf);
         }
-        if(isneginf_count > 0) {
-            this.Load(name+".map(_==Double.NEGATIVE_INFINITY)", isneginf);
+        if (isneginf_count > 0) {
+            this.Load(name + ".map(_==Double.NEGATIVE_INFINITY)", isneginf);
         }
     }
 
@@ -3020,7 +3039,7 @@ public class PlotterTopComponent extends TopComponent {
                 pl.LoadURL(fileName);
                 pl.set_load_info_panel(null);
             } catch (Exception e) {
-                e.printStackTrace();
+                printThrowable(e);
             } finally {
                 if (null != loadInfoFrame) {
                     loadInfoFrame.setVisible(false);
@@ -3061,7 +3080,7 @@ public class PlotterTopComponent extends TopComponent {
             RecalculatePlots();
 
         } catch (java.lang.OutOfMemoryError oome) {
-            oome.printStackTrace();
+//            oomprintThrowable(e);
             //System.out.println("max=" + Runtime.getRuntime().maxMemory() + ", total=" + Runtime.getRuntime().totalMemory() + ", free=" + Runtime.getRuntime().freeMemory());
         }
 
@@ -3388,7 +3407,7 @@ public class PlotterTopComponent extends TopComponent {
             }
 
         } catch (Exception e) {
-            e.printStackTrace();
+            printThrowable(e);
         }
     }
 
@@ -3658,7 +3677,7 @@ public class PlotterTopComponent extends TopComponent {
             }
             return fy;
         } catch (Exception e) {
-            e.printStackTrace();
+            printThrowable(e);
         }
         if (this.apply_absolute_value) {
             return Math.abs(y);
@@ -3771,7 +3790,7 @@ public class PlotterTopComponent extends TopComponent {
 
             return fx;
         } catch (Exception e) {
-            e.printStackTrace();
+            printThrowable(e);
         }
 
         return x;
@@ -4016,7 +4035,7 @@ public class PlotterTopComponent extends TopComponent {
 
                         }
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        printThrowable(e);
                     }
 
                 }
@@ -4043,7 +4062,7 @@ public class PlotterTopComponent extends TopComponent {
                             }
                         }
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        printThrowable(e);
                     }
                 }
                 if (last_function_selected != function_selected
@@ -4061,7 +4080,7 @@ public class PlotterTopComponent extends TopComponent {
 
             point_added_since_check_recalc_plots = false;
         } catch (Exception e) {
-            e.printStackTrace();
+            printThrowable(e);
         }
 
         recalculating_plots = false;

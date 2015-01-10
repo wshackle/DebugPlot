@@ -18,6 +18,9 @@ import org.netbeans.api.debugger.jpda.JPDADebugger;
 import org.netbeans.api.debugger.jpda.ObjectVariable;
 import org.netbeans.api.debugger.jpda.Variable;
 import org.openide.util.lookup.ServiceProvider;
+import org.openide.windows.IOProvider;
+import org.openide.windows.InputOutput;
+import org.openide.windows.OutputWriter;
 
 /**
  *
@@ -26,6 +29,24 @@ import org.openide.util.lookup.ServiceProvider;
 @ServiceProvider(service = Evaluator.class)
 public class JDPAEvaluator implements Evaluator {
 
+    private void printString(String s) {
+        InputOutput io = IOProvider.getDefault().getIO(this.getClass().getCanonicalName(), false);
+//        io.select();
+        OutputWriter writer = io.getOut();
+        writer.println(s);
+        writer.close();
+        System.err.println(s);
+    }
+
+    private void printThrowable(Throwable t) {
+        InputOutput io = IOProvider.getDefault().getIO(this.getClass().getCanonicalName(), false);
+        io.select();
+        OutputWriter writer = io.getOut();
+        t.printStackTrace(writer);
+        writer.close();
+        t.printStackTrace();
+    }
+    
     private JPDADebugger getDebugger() {
         try {
             final DebuggerManager dm = DebuggerManager.getDebuggerManager();
@@ -45,7 +66,7 @@ public class JDPAEvaluator implements Evaluator {
             }
             return d;
         } catch (Exception e) {
-            e.printStackTrace();
+            printThrowable(e);
         }
         return null;
     }
@@ -74,8 +95,12 @@ public class JDPAEvaluator implements Evaluator {
                 r.returnResult(null);
                 return;
             }
-            Variable ov = d.evaluate(expr);
 
+            Variable ov = d.evaluate(expr);
+            if (ov.getValue().equals("null")) {
+                r.returnResult(null);
+                return;
+            }
             //System.out.println("v = " + v);
             //System.out.println(v.getType());
             //System.out.println(v.getValue());
@@ -138,6 +163,10 @@ public class JDPAEvaluator implements Evaluator {
                     }
                 }
                 final Variable elem_v = d.evaluate(mapped_elem_name);
+                if (elem_v.getValue().equals("null")) {
+                    fakeMirror.add(null);
+                    continue;
+                }
                 Object elem_mirror = elem_v.createMirrorObject();
                 if (elem_mirror != null) {
                     fakeMirror.add(elem_mirror);
@@ -230,7 +259,7 @@ public class JDPAEvaluator implements Evaluator {
             r.returnResult(fakeMirror);
             return;
         } catch (Exception exception) {
-            exception.printStackTrace();
+            printThrowable(exception);
         }
         r.returnResult(null);
         return;
