@@ -38,10 +38,8 @@ import java.awt.Color;
 import java.awt.Container;
 import java.awt.Desktop;
 import java.awt.Dimension;
-import java.awt.GraphicsDevice;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.image.BufferedImage;
 import java.beans.PropertyChangeEvent;
@@ -98,7 +96,7 @@ import org.openide.windows.TopComponent;
 @TopComponent.Description(
         preferredID = "PlotterTopComponent",
         iconBase = "dbgplot/ploticon.png",
-        persistenceType = TopComponent.PERSISTENCE_NEVER
+        persistenceType = TopComponent.PERSISTENCE_ALWAYS
 )
 @TopComponent.Registration(mode = "output", openAtStartup = false)
 @ActionID(category = "Window", id = "dbgplot.plotter.PlotterTopComponent")
@@ -1057,48 +1055,46 @@ public class PlotterTopComponent extends TopComponent {
                             .addGroup(layout.createSequentialGroup()
                                 .addComponent(jTextFieldEvalExpr)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jLabel9)
-                                .addGap(4, 4, 4)
-                                .addComponent(jTextFieldMap, javax.swing.GroupLayout.PREFERRED_SIZE, 94, javax.swing.GroupLayout.PREFERRED_SIZE))
+                                .addComponent(jLabel9))
                             .addGroup(layout.createSequentialGroup()
-                                .addComponent(jTextFieldYMax, javax.swing.GroupLayout.PREFERRED_SIZE, 38, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addGap(6, 6, 6)
+                                .addComponent(jTextFieldYMax, javax.swing.GroupLayout.DEFAULT_SIZE, 44, Short.MAX_VALUE)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                 .addComponent(jLabelYScale)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                 .addComponent(jLabel3)
-                                .addGap(8, 8, 8)
-                                .addComponent(jTextFieldYMin, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(jTextFieldYMin)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                 .addComponent(jLabel2)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jTextFieldXMin, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addGap(6, 6, 6)
-                                .addComponent(jLabelXScale)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(jTextFieldXMin, javax.swing.GroupLayout.DEFAULT_SIZE, 50, Short.MAX_VALUE)
+                                .addGap(18, 18, 18)
+                                .addComponent(jLabelXScale)))
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addGroup(layout.createSequentialGroup()
                                 .addComponent(jLabel4)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jTextFieldXMax, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)))
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
-                            .addGroup(javax.swing.GroupLayout.Alignment.LEADING, layout.createSequentialGroup()
-                                .addComponent(jButton1)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jToggleButtonSplit))
-                            .addGroup(javax.swing.GroupLayout.Alignment.LEADING, layout.createSequentialGroup()
+                                .addComponent(jTextFieldXMax, javax.swing.GroupLayout.DEFAULT_SIZE, 40, Short.MAX_VALUE))
+                            .addComponent(jTextFieldMap))
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addGroup(layout.createSequentialGroup()
                                 .addComponent(jButtonPlot)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jButtonClear)))
-                        .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
+                                .addComponent(jButtonClear))
+                            .addGroup(layout.createSequentialGroup()
+                                .addComponent(jButton1)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(jToggleButtonSplit)))
+                        .addGap(24, 24, 24))))
         );
-
-        layout.linkSize(javax.swing.SwingConstants.HORIZONTAL, new java.awt.Component[] {jTextFieldXMin, jTextFieldYMin});
-
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(layout.createSequentialGroup()
                 .addContainerGap()
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addComponent(jScrollBarVert, javax.swing.GroupLayout.DEFAULT_SIZE, 77, Short.MAX_VALUE)
+                    .addComponent(jScrollBarVert, javax.swing.GroupLayout.DEFAULT_SIZE, 89, Short.MAX_VALUE)
                     .addComponent(plotGraphJPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addComponent(jScrollBarHorz, javax.swing.GroupLayout.PREFERRED_SIZE, 13, javax.swing.GroupLayout.PREFERRED_SIZE)
@@ -1117,16 +1113,13 @@ public class PlotterTopComponent extends TopComponent {
                     .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 23, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(jToggleButtonSplit, javax.swing.GroupLayout.PREFERRED_SIZE, 23, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                        .addComponent(jTextFieldEvalExpr)
-                        .addComponent(jButtonClear)
-                        .addComponent(jButtonPlot)
-                        .addComponent(jLabel9)
-                        .addComponent(jTextFieldMap, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
-                    .addGroup(layout.createSequentialGroup()
-                        .addComponent(jLabel8)
-                        .addContainerGap(24, Short.MAX_VALUE))))
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(jTextFieldEvalExpr, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(jButtonClear)
+                    .addComponent(jButtonPlot)
+                    .addComponent(jLabel9)
+                    .addComponent(jTextFieldMap, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(jLabel8)))
         );
     }// </editor-fold>//GEN-END:initComponents
     private boolean auto_fit_to_graph = true;
@@ -1815,122 +1808,6 @@ public class PlotterTopComponent extends TopComponent {
         this.addKeyListener(kl);
     }
 
-    private void ShowFullScreen() {
-
-        if (PlotterCommon.debug_on) {
-            PlotterCommon.DebugPrint("ShowFullScreen");
-        }
-        this.plotGraphJPanel1.fullScreenJFrame = new JFrame();
-        this.plotGraphJPanel1.fullScreenJFrame.setUndecorated(true);
-        this.fullScreenPlotGraphJPanel = new PlotGraphJPanel();
-
-        //this.plotGraphJPanel1 = new PlotGraphJPanel();
-//	this.plotGraphJPanel1.fullScreenJPanel = new fullScreenJPanelClass();
-//	Dimension d = Toolkit.getDefaultToolkit().getScreenSize();
-//	this.plotGraphJPanel1.fullScreenJPanel.setSize(d);
-//	this.plotGraphJPanel1.fullScreenJPanel.SetImage(getImage(d));
-        this.fullScreenPlotGraphJPanel.addMouseListener(new java.awt.event.MouseAdapter() {
-
-            @Override
-            public void mouseClicked(java.awt.event.MouseEvent evt) {
-                plotGraphJPanel1MouseClicked(evt);
-            }
-
-            @Override
-            public void mousePressed(java.awt.event.MouseEvent evt) {
-                plotGraphJPanel1MousePressed(evt);
-            }
-
-            @Override
-            public void mouseReleased(java.awt.event.MouseEvent evt) {
-                plotGraphJPanel1MouseReleased(evt);
-            }
-        });
-
-        this.fullScreenPlotGraphJPanel.addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
-
-            public void mouseDragged(java.awt.event.MouseEvent evt) {
-                plotGraphJPanel1MouseDragged(evt);
-            }
-        });
-        KeyListener kl = new KeyListener() {
-
-            private void HandleKey(final int key_code) {
-                switch (key_code) {
-                    case KeyEvent.VK_ESCAPE:
-                        ClearFullScreen();
-                        break;
-                    case KeyEvent.VK_LEFT:
-                        ScrollLeftInc();
-                        break;
-                    case KeyEvent.VK_RIGHT:
-                        ScrollRightInc();
-                        break;
-                    case KeyEvent.VK_UP:
-                        ScrollUpInc();
-                        break;
-                    case KeyEvent.VK_DOWN:
-                        ScrollDownInc();
-                        break;
-                }
-            }
-
-            @Override
-            public void keyTyped(KeyEvent e) {
-                HandleKey(e.getKeyCode());
-            }
-
-            @Override
-            public void keyPressed(KeyEvent e) {
-                HandleKey(e.getKeyCode());
-            }
-
-            @Override
-            public void keyReleased(KeyEvent e) {
-            }
-        };
-
-        this.fullScreenPlotGraphJPanel.SetKeyListener(kl);
-        this.fullScreenPlotGraphJPanel.CopySettings(plotGraphJPanel1);
-        this.cur_pgjp = this.fullScreenPlotGraphJPanel;
-        this.plotGraphJPanel1.fullScreenJFrame.addKeyListener(kl);
-
-//	this.plotGraphJPanel1.fullScreenJFrame.add(this.plotGraphJPanel1.fullScreenJPanel);
-        this.plotGraphJPanel1.fullScreenJFrame.add(this.fullScreenPlotGraphJPanel);
-        this.plotGraphJPanel1.fullScreenJFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        GraphicsDevice gd = this.getGraphicsConfiguration().getDevice();
-
-        HideMe();
-
-        gd.setFullScreenWindow(this.plotGraphJPanel1.fullScreenJFrame);
-        this.fullScreenPlotGraphJPanel.is_full_screen = true;
-        this.fullScreenPlotGraphJPanel.HandleResize();
-
-    }
-
-    private void ClearFullScreen() {
-        if (PlotterCommon.debug_on) {
-            PlotterCommon.DebugPrint("ClearFullScreen");
-        }
-        if (null != this.plotGraphJPanel1.fullScreenJFrame) {
-            this.plotGraphJPanel1.fullScreenJFrame.dispose();
-            this.plotGraphJPanel1.fullScreenJFrame = null;
-        }
-        if (null != this.fullScreenPlotGraphJPanel) {
-            this.fullScreenPlotGraphJPanel.setVisible(false);
-            this.fullScreenPlotGraphJPanel = null;
-        }
-
-        this.plotGraphJPanel1.is_full_screen = false;
-        this.jpopFullScreenCheckboxMenuItem.setSelected(false);
-        GraphicsDevice gd = this.getGraphicsConfiguration().getDevice();
-        gd.setFullScreenWindow(null);
-//	this.plotGraphJPanel1.fullScreenJPanel = null;
-        ShowMe();
-        this.cur_pgjp = this.plotGraphJPanel1;
-        this.plotGraphJPanel1.HandleResize();
-    }
-
     public void showDataTable() {
         this.jFrameData.setVisible(false);
         ((DefaultTableModel) jTableData.getModel()).setDataVector(new Vector<Double>(), new Vector<Double>());
@@ -1989,28 +1866,6 @@ public class PlotterTopComponent extends TopComponent {
 
     private void popup_create() {
         jpop = new JPopupMenu();
-//        jpopFullScreenCheckboxMenuItem
-//                = new JCheckBoxMenuItem("Full Screen");
-//        jpopFullScreenCheckboxMenuItem.addActionListener(new ActionListener() {
-//
-//            public void actionPerformed(ActionEvent e) {
-//                if (e.getSource() == jpopFullScreenCheckboxMenuItem) {
-//                    if (PlotterCommon.debug_on) {
-//                        PlotterCommon.DebugPrint("jpopFullScreenCheckboxMenuItem.isSelected()=" + jpopFullScreenCheckboxMenuItem.isSelected());
-//                    }
-//                    if (!cur_pgjp.is_full_screen) {
-//                        ShowFullScreen();
-//                    } else {
-//                        ClearFullScreen();
-//                    }
-//
-//                    if (cur_pgjp.is_full_screen != jpopFullScreenCheckboxMenuItem.isSelected()) {
-//                        jpopFullScreenCheckboxMenuItem.setSelected(cur_pgjp.is_full_screen);
-//                    }
-//                }
-//            }
-//        });
-//        jpop.add(this.jpopFullScreenCheckboxMenuItem);
         jpopSaveImageMenuItem
                 = new JMenuItem("Save Image As ...");
         jpopSaveImageMenuItem.addActionListener(new ActionListener() {
@@ -2325,45 +2180,6 @@ public class PlotterTopComponent extends TopComponent {
         plotGraphJPanel1.HandleResize();
     }//GEN-LAST:event_plotGraphJPanel1ComponentResized
 
-    private void ScrollLeftInc() {
-        PlotGraphScreenMap cur_screen_map = plotGraphJPanel1.screen_map;
-        int old_x = cur_screen_map.get_scroll_x();
-        cur_screen_map.set_scroll_x(old_x + 10);
-        UpdateXTextFields();
-
-        refresh();
-
-    }
-
-    private void ScrollRightInc() {
-        PlotGraphScreenMap cur_screen_map = plotGraphJPanel1.screen_map;
-        int old_x = cur_screen_map.get_scroll_x();
-        cur_screen_map.set_scroll_x(old_x - 10);
-        UpdateXTextFields();
-
-        refresh();
-
-    }
-
-    private void ScrollUpInc() {
-        PlotGraphScreenMap cur_screen_map = plotGraphJPanel1.screen_map;
-        int old_y = cur_screen_map.get_scroll_y();
-        cur_screen_map.set_scroll_y(old_y + 10);
-        UpdateXTextFields();
-
-        refresh();
-
-    }
-
-    private void ScrollDownInc() {
-        PlotGraphScreenMap cur_screen_map = plotGraphJPanel1.screen_map;
-        int old_y = cur_screen_map.get_scroll_y();
-        cur_screen_map.set_scroll_y(old_y - 10);
-        UpdateXTextFields();
-
-        refresh();
-
-    }
 
     private void jScrollBarHorzAdjustmentValueChanged(java.awt.event.AdjustmentEvent evt)//GEN-FIRST:event_jScrollBarHorzAdjustmentValueChanged
     {//GEN-HEADEREND:event_jScrollBarHorzAdjustmentValueChanged
