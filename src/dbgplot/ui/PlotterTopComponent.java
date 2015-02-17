@@ -31,6 +31,8 @@
  */
 package dbgplot.ui;
 
+import dbgplot.DebugPlotPrint;
+import static dbgplot.DebugPlotPrint.printThrowable;
 import dbgplot.evaluator.spi.Evaluator;
 import dbgplot.evaluator.spi.Returner;
 import dbgplot.utils.SaveImage;
@@ -78,9 +80,6 @@ import org.openide.awt.ActionReference;
 import org.openide.util.Lookup;
 import org.openide.util.NbBundle;
 import org.openide.util.RequestProcessor;
-import org.openide.windows.IOProvider;
-import org.openide.windows.InputOutput;
-import org.openide.windows.OutputWriter;
 import org.openide.windows.TopComponent;
 
 /**
@@ -137,23 +136,6 @@ public class PlotterTopComponent extends TopComponent {
 
     private boolean showGetters = false;
 
-    private static void printString(String s) {
-        InputOutput io = IOProvider.getDefault().getIO("PlotterTopComponent", false);
-//        io.select();
-        OutputWriter writer = io.getOut();
-        writer.println(s);
-        writer.close();
-        System.err.println(s);
-    }
-
-    private static void printThrowable(Throwable t) {
-        InputOutput io = IOProvider.getDefault().getIO("PlotterTopComponent", false);
-        io.select();
-        OutputWriter writer = io.getOut();
-        t.printStackTrace(writer);
-        writer.close();
-        t.printStackTrace();
-    }
     
     /**
      * Creates new form plotter_NB_UI
@@ -228,7 +210,7 @@ public class PlotterTopComponent extends TopComponent {
                 return;
             }
         }
-        printString("No valid evaluator found.");
+        DebugPlotPrint.printString("No valid evaluator found.");
     }
 
 //    private void evaluateAndPlotPrivate(final String expr) {
@@ -454,7 +436,13 @@ public class PlotterTopComponent extends TopComponent {
     }
 
     public void evaluateAndPlot(final String expr, final String map) {
-        printString("evaluateAndPlot(\""+expr+"\",\""+map+"\")");
+        DebugPlotPrint.printString("evaluateAndPlot(\"" + expr + "\",\"" + map + "\")");
+        if (!this.jTextFieldEvalExpr.getText().equals(expr)) {
+            this.jTextFieldEvalExpr.setText(expr);
+        }
+        if (null != map && !this.jTextFieldMap.getText().equals(map)) {
+            this.jTextFieldMap.setText(map);
+        }
         this.jTextFieldEvalExpr.setEditable(false);
         this.jTextFieldEvalExpr.setEnabled(false);
         this.jTextFieldMap.setEditable(false);
@@ -470,7 +458,7 @@ public class PlotterTopComponent extends TopComponent {
             @Override
             public void run() {
                 try {
-                    evaluateAndPlotPrivate2(expr.trim(), map.trim(), mapped_expr);
+                    evaluateAndPlotPrivate2(expr.trim(), map, mapped_expr);
                 } catch (Exception e) {
                     // ignore
                 } finally {

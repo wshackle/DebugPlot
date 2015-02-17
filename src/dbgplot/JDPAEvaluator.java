@@ -5,6 +5,7 @@
  */
 package dbgplot;
 
+import static dbgplot.DebugPlotPrint.printThrowable;
 import dbgplot.evaluator.spi.Evaluator;
 import dbgplot.evaluator.spi.Returner;
 import java.util.ArrayList;
@@ -18,9 +19,6 @@ import org.netbeans.api.debugger.jpda.JPDADebugger;
 import org.netbeans.api.debugger.jpda.ObjectVariable;
 import org.netbeans.api.debugger.jpda.Variable;
 import org.openide.util.lookup.ServiceProvider;
-import org.openide.windows.IOProvider;
-import org.openide.windows.InputOutput;
-import org.openide.windows.OutputWriter;
 
 /**
  *
@@ -29,23 +27,6 @@ import org.openide.windows.OutputWriter;
 @ServiceProvider(service = Evaluator.class)
 public class JDPAEvaluator implements Evaluator {
 
-    private void printString(String s) {
-        InputOutput io = IOProvider.getDefault().getIO(this.getClass().getCanonicalName(), false);
-//        io.select();
-        OutputWriter writer = io.getOut();
-        writer.println(s);
-        writer.close();
-        System.err.println(s);
-    }
-
-    private void printThrowable(Throwable t) {
-        InputOutput io = IOProvider.getDefault().getIO(this.getClass().getCanonicalName(), false);
-        io.select();
-        OutputWriter writer = io.getOut();
-        t.printStackTrace(writer);
-        writer.close();
-        t.printStackTrace();
-    }
     
     private JPDADebugger getDebugger() {
         try {
